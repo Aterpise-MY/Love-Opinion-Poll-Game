@@ -1,0 +1,3774 @@
+/* ===========================================================================
+   这样恋爱可不可以 — design system
+
+   One scenario is shown at a time and the room says where it stands on it:
+   可以 / 不可以.
+
+   THE LOOK is the 感情讲座 poster's. A lilac gradient under a faint blue grid;
+   pink, yellow and electric blue on white. Every shape has an ink outline and
+   a hard offset shadow with no blur — there are no soft shadows anywhere.
+   Titles are a heavy face with an ink stroke and a blue offset, one word one
+   colour: pink for the key word, yellow for the second line, white for the
+   rest. Numbers and UI chrome are a pixel face, worded as game progress
+   (STAGE, %). The furniture is chat bubbles, typing dots, pixel hearts and +
+   sparkles. No emoji.
+
+   Four rules the whole thing hangs on:
+
+   1. COLOUR IS THE OPTION'S NAME. Each option key has one colour and keeps it
+      everywhere — on the phone, on the projector, in the operator's tally, in
+      the reveal. Nobody has to translate between what they tapped and what
+      they are looking at.
+
+   2. THE TILE IS THE BUTTON. An ink outline and a hard ink shadow, and it
+      moves into that shadow when pressed. That single detail is what makes
+      this read as a game rather than a form.
+
+   3. WHAT IS BEING JUDGED SITS ON A WHITE CARD. A paragraph of Chinese is
+      read word by word, not glanced at, and ink on white is the easiest thing
+      there is to read — on a phone and from the back of a room alike.
+
+   4. THE REVEAL IS HOW THE ROOM SPLIT, NOT WHICH SIDE WON. The projector
+      draws one bar divided where the room divided, each part in its option's
+      own colour, and every phone turns the colour of what it chose. Nothing is
+      marked right, because on an opinion poll nothing is.
+
+   TOKENS. The :root block below is the only place a colour is defined, and it
+   comes in two layers:
+
+     palette   the design language's own names and values — --pink-500,
+               --blue-600, --ink-900 and the rest — with its radii, border
+               widths, hard shadows and font stacks
+     roles     what this app means by them: the stage (--bg*, --ink*, --line*),
+               the reading panel, the six options (--a … --f, each with the
+               --on-a … --on-f written on top of it), the accent (--alert), the
+               signals (--danger, --ok) and the wells
+
+   A rule reads a role where there is one, and a palette name where the design
+   language itself would: a ribbon is pink because ribbons are pink.
+
+   Values are literal colours. No color-mix() in a token or on a phone surface:
+   the audience opens this in old Android WebViews that do not have it.
+
+   What is deliberately NOT a token, because it is fixed by what it does rather
+   than by how the room is dressed: the QR card's white and near-black (a
+   scanner needs that contrast whatever the theme), the black behind a
+   letterboxed video, the scrim and white text laid over media, and the
+   darkening that draws a percentage fill on top of an option colour.
+   =========================================================================== */
+
+:root {
+  /* ---- Palette: the design language's own names and values ---------------- */
+  --pink-500: #e8338a;
+  --pink-400: #ff4fa0;
+  --pink-300: #ff7bc2;
+  --pink-100: #ffd9ec;
+  --yellow-500: #fdd31f;
+  --yellow-300: #ffe675;
+  --blue-700: #1f2fb8;
+  --blue-600: #3647df;
+  --blue-500: #4861e4;
+  --blue-200: #c9cfff;
+  --lilac-500: #9f95f2;
+  --lilac-300: #c7c0fa;
+  --lilac-100: #e5e3ff;
+  --ink-900: #0b0b14;
+  --ink-700: #2a2a3d;
+  --ink-500: #5c5c78;
+  --ink-300: #a9a9c2;
+  --white: #ffffff;
+  --paper: #f7f6ff;
+  --success: #2bc48a;
+  --danger: #ff3b5c;
+
+  --radius-xs: 2px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --border-w: 3px;
+  --border-w-thin: 2px;
+  --border-w-heavy: 4px;
+
+  /* Hard shadows: an offset, a colour, and never any blur. */
+  --shadow-hard-sm: 3px 3px 0 var(--ink-900);
+  --shadow-hard: 5px 5px 0 var(--ink-900);
+  --shadow-hard-blue: 5px 5px 0 var(--blue-600);
+  --shadow-hard-pink: 5px 5px 0 var(--pink-500);
+
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --ls-display: 0.02em;
+  --ls-pixel: 0.08em;
+
+  /* ---- Roles: what this app means by them -------------------------------- */
+
+  /* Stage: the room behind everything, and what is written straight on it.
+     The four --bg values are the stops of the poster gradient, so anything
+     that needs a flat piece of the page takes one of them and sits on it
+     without a seam. */
+  --bg-lift: #ecebff;
+  --bg: #d9d6ff;
+  --bg-deep: #b9aef6;
+  --bg-blush: #f3b6e4;
+  --bg-poster: linear-gradient(
+    115deg,
+    var(--bg-lift) 0%,
+    var(--bg) 40%,
+    var(--bg-deep) 75%,
+    var(--bg-blush) 100%
+  );
+  --grid-line: rgba(54, 71, 223, 0.1);
+  /* The whole backdrop as one value, with the size its three layers need: the
+     grid's two sets of lines repeat every 22px, and the gradient under them
+     fills the box. */
+  --bg-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px), var(--bg-poster);
+  --bg-size: 22px 22px, 22px 22px, auto;
+  --ink: var(--ink-900);
+  --ink-dim: var(--ink-500);
+  /* Two lines for two jobs: the ink outline every shape wears, and the blue
+     one the design language puts on inputs, meters and sunken panels. There
+     is no third, quiet one — nothing here is divided by a hairline. */
+  --line: var(--ink-900);
+  --line-brand: var(--blue-600);
+
+  /* Panel: the card the thing being judged is read from, on the phone and on
+     the wall, with its own ink. */
+  --panel: var(--white);
+  --panel-ink: var(--ink-900);
+  --panel-ink-dim: var(--ink-500);
+
+  /* Choice identity, one per option key, each with the colour that is written
+     on top of it. None of them is a traffic-light pair, so the colour never
+     hints at which option is "right", and they are far enough apart that six
+     of them are still telling apart from the back row. White reads on pink,
+     blue and the dark slate; yellow, lilac and green need ink. */
+  --a: var(--pink-500);
+  --on-a: var(--white);
+  --b: var(--blue-600);
+  --on-b: var(--white);
+  --c: var(--yellow-500);
+  --on-c: var(--ink-900);
+  --d: var(--lilac-500);
+  --on-d: var(--ink-900);
+  --e: var(--success);
+  --on-e: var(--ink-900);
+  --f: var(--ink-700);
+  --on-f: var(--white);
+  /* What a rule gets when it asks for --on-key outside any .key--x. */
+  --on-key: var(--white);
+  /* The page's grid, redrawn for a surface that is one flat option colour. */
+  --grid-line-on-key: rgba(255, 255, 255, 0.16);
+
+  /* Accent: the one colour that means "look here" — the current tick, the
+     primary button, a badge. Never used as text on the page: yellow on lilac
+     cannot be read. */
+  --alert: var(--yellow-500);
+  --on-alert: var(--ink-900);
+
+  /* Signals. --danger is the last ten seconds and anything destructive; --ok
+     is a save that went through. Neither is a verdict on a vote — there is no
+     such thing here. Both are fills with an ink outline, not text colours. */
+  --on-danger: var(--white);
+  --ok: var(--success);
+
+  /* Wells: where a surface is sunk into a white card rather than raised off
+     the page. Flat washes, faint to strong, and each one is drawn with an
+     outline — on a light page a tint alone does not make an edge. */
+  --well-1: var(--paper);
+  --well-2: var(--lilac-100);
+  --well-3: var(--lilac-300);
+
+  /* ---- Type --------------------------------------------------------------- */
+
+  /* What the device already has. Body text, question titles, labels on phone
+     buttons — anything that can be any character at all — is set in this, so
+     that no phone downloads a font slice per question. */
+  --font-system:
+    system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  /* "Poll Glyphs" leads every stack. It holds exactly two characters, the
+     heart and the cross the default options use as icons, so they are drawn as
+     the same text glyph everywhere and never as a handset's emoji. A browser
+     only fetches it when one of the two is actually on screen. */
+  --font-body: "Poll Glyphs", var(--font-system);
+  /* Titles, and the ribbon. On a phone and on the operator console these are
+     the system face; fonts-display.css, which only the projector and setup
+     pages load, points them at the web fonts. See main.jsx. */
+  --font-display: "Poll Glyphs", var(--font-system);
+  --font-hand: "Poll Glyphs", var(--font-system);
+  /* Numbers and UI chrome. Latin only, so anything else in the same run —
+     a Chinese word next to a number — falls through to the system face. */
+  --font-pixel: "Silkscreen", "Poll Glyphs", var(--font-system);
+
+  /* The title stroke, as the design language computes it: about an eleventh of
+     the type size, and never under 3px. Half of it lands outside the glyph, so
+     this is a 3px outline on a 64px title. */
+  --title-stroke: max(3px, 0.09em);
+  /* The same outline for phones, built out of hard text-shadows instead.
+     -webkit-text-stroke needs paint-order to keep the stroke behind the fill,
+     and an old Android WebView that ignores paint-order paints it over the
+     glyph and eats the text. Eight shadows on a square cannot do that. */
+  --outline-2:
+    2px 0 0 var(--line), -2px 0 0 var(--line), 0 2px 0 var(--line), 0 -2px 0 var(--line),
+    2px 2px 0 var(--line), -2px 2px 0 var(--line), 2px -2px 0 var(--line), -2px -2px 0 var(--line);
+  --outline-3:
+    3px 0 0 var(--line), -3px 0 0 var(--line), 0 3px 0 var(--line), 0 -3px 0 var(--line),
+    3px 3px 0 var(--line), -3px 3px 0 var(--line), 3px -3px 0 var(--line), -3px -3px 0 var(--line);
+
+  color-scheme: light;
+  font-family: var(--font-body);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--bg);
+  background-image: var(--bg-image);
+  background-size: var(--bg-size);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  /* No double-tap zoom: the operator taps fast and repeatedly. */
+  touch-action: manipulation;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.muted {
+  color: var(--ink-700);
+}
+.small {
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The design language's small parts — used on every surface
+--------------------------------------------------------------------------- */
+
+/* Numbers and UI chrome are set in the pixel face: every percentage, count,
+   clock and counter in the app wears this, so a number looks like a number
+   wherever it turns up. */
+.num,
+.badge,
+.px {
+  font-family: var(--font-pixel);
+  /* The regular cut unless a rule says otherwise: the bold one closes up the
+     counters of the percent sign until it stops being one. */
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A small label in a box: STAGE 1/5, 01, a phase name. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2em 0.55em;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--alert);
+  color: var(--on-alert);
+  font-weight: 400;
+  letter-spacing: var(--ls-pixel);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* An option's icon. The default pair are text glyphs — a heart and a cross —
+   and get a thin ink outline, as the design language gives its own heart. A
+   host who types a digit gets it in the pixel face, at its regular weight;
+   one who picks an emoji gets the emoji, which no outline shows around.
+
+   The outline is hard text-shadows and not -webkit-text-stroke. A stroke
+   straddles the edge of the glyph, and on a phone that cannot put it behind
+   the fill it eats inwards: the cross is thin strokes to begin with, and came
+   out of that as a dark X on the blue button with no white left in it.
+   Shadows sit wholly outside the glyph, in em so they scale with it. */
+.glyph {
+  font-family: "Poll Glyphs", "Silkscreen", var(--font-system);
+  font-weight: 400;
+  text-shadow:
+    0.05em 0 0 var(--line),
+    -0.05em 0 0 var(--line),
+    0 0.05em 0 var(--line),
+    0 -0.05em 0 var(--line),
+    0.04em 0.04em 0 var(--line),
+    -0.04em 0.04em 0 var(--line),
+    0.04em -0.04em 0 var(--line),
+    -0.04em -0.04em 0 var(--line);
+}
+
+/* A pixel icon, sized by the text it sits in. */
+.px-icon {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+}
+
+/* The series ribbon: pink, hand-lettered, with a blue edge along two sides. */
+.ribbon {
+  display: inline-block;
+  padding: 0.2em 0.9em 0.2em 1.2em;
+  border-right: var(--border-w-heavy) solid var(--blue-600);
+  border-bottom: var(--border-w-heavy) solid var(--blue-600);
+  background: var(--pink-500);
+  box-shadow: inset 0 0 0 2px var(--pink-300);
+  color: var(--white);
+  font-family: var(--font-hand);
+  letter-spacing: 0.3em;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* A chat bubble, tail on the left unless told otherwise. */
+.bubble {
+  position: relative;
+  display: inline-block;
+  padding: 10px 16px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--ink);
+  line-height: 1.5;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -11px;
+  left: 18px;
+  width: 14px;
+  height: 14px;
+  border-right: var(--border-w) solid var(--line);
+  border-bottom: var(--border-w) solid var(--line);
+  background: inherit;
+  transform: rotate(45deg);
+}
+.bubble--right::after {
+  right: 18px;
+  left: auto;
+}
+.bubble--pink {
+  background: var(--pink-500);
+  color: var(--white);
+}
+
+/* Typing dots: three squares taking turns. Stepped, not eased — a pixel is on
+   or it is off. */
+.dots {
+  display: inline-flex;
+  gap: 0.3em;
+  align-items: center;
+  height: 1.5em;
+  vertical-align: top;
+}
+.dots i {
+  width: 0.38em;
+  height: 0.38em;
+  background: currentColor;
+  animation: typing 1.2s steps(1, end) infinite;
+}
+.dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes typing {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* The switch: a pill with a knob that slides. Lilac when off, pink when on,
+   and sized in em so one rule serves wherever it is put — 3em by 1.625em is
+   the design language's 48 by 26 at 16px. The knob is whatever height is left
+   inside the outline, less a 2px gap all round. */
+.switch {
+  --knob: calc(1.625em - 2 * var(--border-w) - 4px);
+
+  position: relative;
+  flex: none;
+  width: 3em;
+  height: 1.625em;
+  padding: 0;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--lilac-300);
+  cursor: pointer;
+  transition: background var(--dur-base);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: var(--knob);
+  height: var(--knob);
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: 50%;
+  background: var(--white);
+  transition: left var(--dur-base) var(--ease-pop);
+}
+.switch[aria-checked="true"] {
+  background: var(--pink-500);
+}
+.switch[aria-checked="true"]::after {
+  left: calc(100% - var(--knob) - 2px);
+}
+.switch:focus-visible {
+  outline: var(--border-w) solid var(--line-brand);
+  outline-offset: 3px;
+}
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* The room's split, written out: a swatch, a label and a number per option. */
+.shares__item {
+  white-space: nowrap;
+}
+.shares__item + .shares__item {
+  margin-left: 0.6em;
+}
+.shares__swatch {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.35em;
+  border: var(--border-w-thin) solid var(--line);
+  background: var(--key, var(--white));
+}
+
+/* The poster's loose furniture. Behind the content of whatever screen it is
+   on, and that screen's own rules say where each piece goes. Nothing in here
+   moves on the wall: the dots are stilled below, because a blinking thing in
+   the corner of a projector is a thing the whole room watches. */
+.deco {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.deco > * {
+  position: absolute;
+}
+.deco .dots i {
+  animation: none;
+}
+.spark {
+  color: var(--blue-600);
+  font-family: var(--font-pixel);
+  font-size: clamp(1.4rem, 2.4vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1;
+}
+.spark--pink {
+  color: var(--pink-500);
+}
+.deco__heart {
+  color: var(--pink-400);
+  font-size: clamp(2.4rem, 4.4vw, 4.6rem);
+}
+.deco .bubble {
+  font-size: clamp(1rem, 1.5vw, 1.6rem);
+}
+/* A portrait wall stacks its columns, and a piece placed for the landscape
+   layout would land on the QR. */
+@media (max-aspect-ratio: 1/1) {
+  .deco {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The tile — one component, used on every surface
+--------------------------------------------------------------------------- */
+
+/* One class per option key, carrying that key's colour — and the colour that
+   is written on it — to whatever wears it: a phone button, a tally row, a
+   segment of the reveal bar, the phone's own reveal. Every component below
+   reads var(--key) with its own fallback, so nothing needs a per-key rule of
+   its own and adding a seventh key is one block here. */
+.key--a {
+  --key: var(--a);
+  --on-key: var(--on-a);
+}
+.key--b {
+  --key: var(--b);
+  --on-key: var(--on-b);
+}
+.key--c {
+  --key: var(--c);
+  --on-key: var(--on-c);
+}
+.key--d {
+  --key: var(--d);
+  --on-key: var(--on-d);
+}
+.key--e {
+  --key: var(--e);
+  --on-key: var(--on-e);
+}
+.key--f {
+  --key: var(--f);
+  --on-key: var(--on-f);
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--key, var(--white));
+  box-shadow: var(--shadow-hard);
+  color: var(--on-key);
+  text-align: left;
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast),
+    background 0.35s ease,
+    opacity 0.35s ease;
+}
+
+/* Into its own shadow: the tile moves by what the shadow gives up. */
+.tile--press:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+.tile:disabled {
+  cursor: default;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.8em;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: 2px 2px 0 var(--line);
+  font-size: 0.85rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pill--urgent {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.pill--warn {
+  background: var(--alert);
+  color: var(--on-alert);
+}
+
+/* Segment ticks: where we are in the deck, readable from the back row. One
+   block per question — pink behind us, yellow under us, white still to come. */
+.ticks {
+  display: flex;
+  gap: 6px;
+}
+.tick {
+  flex: 1;
+  height: 12px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--white);
+}
+.tick.is-done {
+  background: var(--pink-400);
+}
+.tick.is-current {
+  background: var(--alert);
+}
+
+/* ---------------------------------------------------------------------------
+   Phone  —  /
+--------------------------------------------------------------------------- */
+
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+  padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+}
+
+.phone__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Closer together than on the wall: a forty-question deck still has to fit
+   its forty outlined blocks across a 320px phone.
+   Two classes deep on purpose. The projector's height budget further down
+   says `.ticks { flex: 0 0 auto }`, which comes later in the file and so beat
+   a bare .phone__ticks — the row collapsed to nothing and the phone had no
+   progress ticks at all. They are meant to be here. */
+.phone__bar .phone__ticks {
+  flex: 1;
+  gap: 3px;
+}
+
+/* The thing being judged: picture on top, text on a white card underneath.
+   White because a paragraph of Chinese is read, not glanced at, and ink on
+   white is far easier to read than anything laid straight on the page. */
+.quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.quiz__image {
+  display: block;
+  width: 100%;
+  max-height: 34vh;
+  object-fit: contain;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--well-2);
+}
+
+.quiz__panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-hard-blue);
+  color: var(--panel-ink);
+}
+
+.quiz__prompt {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--blue-600);
+}
+
+.quiz__body {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.quiz__choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.choice {
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 96px;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+/* Past two options the buttons still have to fit above the fold on a small
+   phone, with the thing being judged still readable above them. */
+.quiz__choices--many .choice {
+  min-height: 68px;
+  padding: 10px;
+}
+.quiz__choices--many .choice__icon {
+  font-size: 1.3rem;
+}
+.quiz__choices--many .choice__label {
+  font-size: 1rem;
+}
+
+/* A picture option. The label stays under it — a photograph on its own gives
+   the room nothing to say out loud when it argues about which one to press. */
+.choice--pictured {
+  gap: 6px;
+  padding: 8px;
+}
+.choice__image {
+  display: block;
+  width: 100%;
+  max-height: 18vh;
+  object-fit: cover;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--well-2);
+}
+.choice--pictured .choice__icon {
+  display: none;
+}
+
+.choice__icon {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+/* The system face, heavy. A label can be anything a host types, and a phone
+   must not go and fetch a slice of the display font to draw it. */
+.choice__label {
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+/* A toast: one line telling the phone's owner where things stand. White for
+   news about the question; the colour of the option, once one is chosen. */
+.quiz__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-sm);
+  font-weight: 800;
+  text-align: center;
+}
+.quiz__status--voted {
+  background: var(--key, var(--white));
+  color: var(--on-key);
+}
+.quiz__status .px-icon {
+  font-size: 1.3em;
+}
+
+/* Bottom countdown: the design language's loading bar. A white box with the
+   blue outline and shadow, a segmented meter inside it and the seconds at its
+   right end — pink blocks for the time still left, blue for what has gone. */
+.phone__countdown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: var(--border-w) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+
+/* The blocks are a repeating gradient, on the track and again on the fill
+   with the same period from the same edge, so the two always line up and the
+   fill's inline width is still the only thing that moves. */
+.phone__countdown-track {
+  --seg: 14px;
+
+  flex: 1;
+  height: 22px;
+  padding: 3px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(
+        90deg,
+        var(--blue-600) 0 calc(var(--seg) - 3px),
+        transparent calc(var(--seg) - 3px) var(--seg)
+      )
+      content-box,
+    var(--white);
+  overflow: hidden;
+}
+
+.phone__countdown-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--meter, var(--pink-400)) 0 calc(var(--seg) - 3px),
+    var(--white) calc(var(--seg) - 3px) var(--seg)
+  );
+}
+
+.phone__countdown-number {
+  min-width: 2.4ch;
+  text-align: right;
+  color: var(--blue-600);
+  font-size: 1.4rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.phone__countdown.is-urgent .phone__countdown-fill {
+  --meter: var(--danger);
+}
+.phone__countdown.is-urgent .phone__countdown-number {
+  color: var(--danger);
+}
+
+/* The payoff screen. Full bleed, and it moves — this is the moment the whole
+   segment is built around. */
+.verdict {
+  /* The hard drop under the title and the number. Blue on the page, ink on
+     an option colour — a blue shadow on the blue option would not be there. */
+  --drop: var(--blue-600);
+
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+  z-index: 30;
+  animation: verdict-in 260ms ease-out both;
+}
+/* The colour of the option this phone chose, under the page's grid. A hall of
+   phones then shows the room its own split, in the same two colours and the
+   same proportion as the bar going up on the wall. */
+.verdict--mine {
+  --drop: var(--line);
+
+  background-color: var(--key, var(--bg));
+  background-image:
+    linear-gradient(var(--grid-line-on-key) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-on-key) 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: var(--on-key);
+}
+/* Nothing of this phone's to colour it with: it did not vote, or nobody did.
+   The page itself, redrawn here because this covers the real one. */
+.verdict--missed {
+  background-color: var(--bg);
+  background-image: var(--bg-image);
+  background-size: var(--bg-size);
+}
+
+/* Fluid, because it is up to four glyphs wide and the pixel face is a wide
+   one: "100%" has to fit the narrowest phone in the room, and this is the
+   number the screen exists for. */
+.verdict__pct {
+  color: var(--white);
+  font-size: clamp(3.4rem, 21vw, 6.5rem);
+  font-weight: 400;
+  line-height: 1.1;
+  text-shadow:
+    var(--outline-3),
+    7px 7px 0 var(--drop);
+}
+
+/* Fluid for the same reason: 你选了「不可以」 has to stay on one line of the
+   narrowest phone in the room, with the number under it. */
+.verdict__title {
+  margin: 0;
+  color: var(--white);
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 7vw, 2.4rem);
+  font-weight: 900;
+  letter-spacing: var(--ls-display);
+  text-shadow:
+    var(--outline-2),
+    5px 5px 0 var(--drop);
+}
+
+.verdict__room {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+/* On the page rather than on an option colour, the room's split gets a card
+   of its own to be read from. */
+.verdict--missed .verdict__room {
+  padding: 10px 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+
+@keyframes verdict-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.phone__center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 20px;
+}
+
+/* The lobby, as a conversation: a white bubble on the left saying the phone
+   is in, and a pink one on the right still typing. */
+.phone__chat {
+  align-items: stretch;
+  gap: 26px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+.phone__chat-in {
+  align-self: flex-start;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: left;
+}
+.phone__chat-in strong {
+  display: block;
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1.3;
+}
+.phone__chat-out {
+  align-self: flex-end;
+  font-size: 1.3rem;
+}
+
+/* A phone heading in the title style: white, outlined in ink, on a blue drop.
+   The system face and stacked shadows, both for the phone's sake — see
+   --font-display and --outline-2. */
+.big {
+  margin: 0;
+  color: var(--white);
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 7.2vw, 2.1rem);
+  font-weight: 900;
+  letter-spacing: var(--ls-display);
+  text-shadow:
+    var(--outline-2),
+    5px 5px 0 var(--blue-600);
+}
+
+.phone__notice {
+  margin: 0;
+  padding: 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--alert);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--on-alert);
+  font-weight: 800;
+  text-align: center;
+}
+
+/* The recap. One card per question the room voted on, standing on a shadow
+   the colour of what this phone chose — the colour it turned at that
+   question's reveal — and on a plain one where it did not vote. */
+.recap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 460px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.recap__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 10px 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: 4px 4px 0 var(--key, var(--ink-300));
+}
+
+.recap__index {
+  font-size: 0.8rem;
+}
+
+.recap__topic {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What this phone chose, as a chip of that option's colour. */
+.recap__mine {
+  padding: 1px 8px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--key, var(--white));
+  color: var(--on-key);
+  font-size: 0.9rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* On a line of its own under the topic, so a long topic and a long option
+   label never have to share one line of a narrow phone with it. */
+.recap__share {
+  grid-column: 2 / -1;
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.recap__share .num {
+  color: var(--blue-600);
+  font-weight: 400;
+}
+
+/* Landscape phone: the panel and the buttons have to share a short viewport. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .quiz__image {
+    max-height: 22vh;
+  }
+  .quiz__body {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+  .choice {
+    min-height: 68px;
+  }
+  .verdict__pct {
+    font-size: 3.4rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Screen  —  /screen
+--------------------------------------------------------------------------- */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2vh, 28px);
+  height: 100%;
+  padding: clamp(18px, 2.6vh, 40px) clamp(22px, 2.8vw, 56px);
+  /* The backstop, not the fix — the fix is the height budget below. This is
+     what stops anything painting outside the wall if that budget is ever wrong
+     again, and it clips transformed descendants too, which matters because two
+     children here are transform-promoted and so paint above the rest. */
+  overflow: hidden;
+}
+
+/* The column's whole height budget, in five lines.
+   Chrome takes its height first and is the same height whatever the question
+   is. The stage and the ballot then divide everything that is left, by ratio.
+   flex-basis 0, not auto: with auto the stage starts from its picture's own
+   height and only the leftover is shared, which is how a tall picture used to
+   push the ballot off the bottom of the wall. With 0 the two of them divide
+   the column and the picture is fitted into whatever its share turns out to
+   be — which is also why nothing inside them may be sized in vh. */
+.ticks,
+.screen__head,
+.countdown,
+.screen__closed,
+.reveal {
+  flex: 0 0 auto;
+}
+.screen[data-stage="on"] .stage {
+  flex: 2 1 0;
+}
+.screen[data-stage="on"] .choices--media {
+  flex: 3 1 0;
+}
+/* Bare cards are one row of text each: they take what they need and the panel
+   keeps the rest, because a paragraph is what the room is reading. */
+.screen[data-stage="on"] .choices--bare {
+  flex: 0 0 auto;
+}
+/* No panel — the ballot is the whole wall. This is the case where a question
+   is nothing but a headline and two pictures. */
+.screen[data-stage="off"] .choices {
+  flex: 1 1 0;
+}
+
+.screen--center {
+  align-items: center;
+  justify-content: center;
+}
+
+/* The title treatment, for the projector and the setup page: the display face
+   at its heaviest, white, with an ink stroke and a blue offset. One word one
+   colour — .hl is the pink key word, and an <em> is the yellow second line.
+
+   -webkit-text-stroke straddles the glyph's edge, and paint-order puts it
+   behind the fill, so what shows is the outer half. These pages run in a
+   current desktop browser; the phone's headings get the same look from
+   stacked shadows instead — see --outline-2. */
+.lobby__title,
+.screen__title,
+.rules__title,
+.final__label,
+.closing__title,
+.setup__title {
+  color: var(--white);
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: var(--ls-display);
+  -webkit-text-stroke: var(--title-stroke) var(--line);
+  paint-order: stroke fill;
+  text-shadow: var(--title-stroke) var(--title-stroke) 0 var(--blue-600);
+}
+.hl {
+  color: var(--pink-500);
+}
+.lobby__title em,
+.setup__title em {
+  color: var(--yellow-500);
+  font-style: normal;
+}
+
+/* These two used to reserve clamp(120px, 12vw, 200px) on the right to clear
+   the corner QR. The QR now has its own projector at /screen2, so the width
+   goes back to the title — which is the thing the back row is trying to read. */
+.screen__head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* STAGE 1/5, as a yellow badge. */
+.screen__index {
+  flex: none;
+  font-size: clamp(0.9rem, 1.3vw, 1.4rem);
+}
+
+.screen__title {
+  /* The stroke and the offset shadow reach past the glyphs, and the overflow
+     below would shear them off at the box's edge. The padding is the room they
+     need on either side and the negative margin takes it straight back out of
+     the layout. Top and bottom get theirs from the line-height instead:
+     padding there would let a slice of a clamped third line show through. */
+  margin: 0 -0.3em 0 -0.12em;
+  padding: 0 0.3em 0 0.12em;
+  font-size: clamp(1.6rem, 2.6vw, 3rem);
+  line-height: 1.32;
+  /* Heavier than the usual eleventh of the type size. This is the smallest
+     title on the wall and the only one that can run to two lines of anything
+     a host types, and what makes white type readable on this page is its
+     outline. */
+  --title-stroke: max(4px, 0.13em);
+  letter-spacing: 0.04em;
+  /* A title is validated to 200 characters. Three lines of it is 180px of
+     header that the stage and the ballot pay for silently, so it stops at two
+     and the rest belongs in the body. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* One item under judgement, as large as the room can read. A white card for
+   the same reason as on the phone: this is a paragraph people read word by
+   word. */
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 2vh, 30px);
+  min-height: 0;
+  padding: clamp(20px, 3vh, 48px) clamp(24px, 4vw, 80px);
+  /* The outline is inside the height the flex line hands this card — it is
+     border-box like everything else — and the shadow is outside it, so neither
+     takes anything from the budget above. */
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: 6px 6px 0 var(--blue-600);
+  color: var(--panel-ink);
+  overflow: hidden;
+  /* The panel's height becomes purely what the flex line assigned it, and its
+     contents stop contributing a min-content height back to the column. That
+     is the spill at its root; the overflow above is only what happens where
+     this is unsupported. It also gives the body text a box to size against. */
+  container-type: size;
+}
+
+/* max-height in percent, never vh: a vh cap is a claim on the viewport made
+   without knowing what else is on the viewport, and 46vh of stage plus 68vh of
+   picture cards plus a reveal is how this column used to end up 268px over.
+   With contain, a replaced element letterboxes instead of overflowing. */
+.stage__image {
+  display: block;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.stage__video {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.stage__video-el {
+  display: block;
+  max-width: 100%;
+  /* Same percentage ceiling as .stage__image, and for the same reason. */
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+.stage__video-unblock {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 12px 22px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--danger);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--on-danger);
+  font-size: clamp(1rem, 1.5vw, 1.5rem);
+  font-weight: 900;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.stage__body {
+  margin: 0;
+  max-width: 26em;
+  /* The size knob from the setup page multiplies whatever the clamp works out
+     to; it is never a size of its own. The clamp is what keeps the text
+     readable from the back row and inside the panel at every viewport, and a
+     raw px value out of a form would throw that away. --body-size defaults to
+     1, which reproduces the unsized rendering exactly. */
+  font-size: calc(clamp(1.6rem, 2.8vw, 3.4rem) * var(--body-size, 1));
+  font-weight: 600;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow: hidden;
+  /* The picture is the elastic one; the words are not. A flex item normally
+     refuses to shrink below its own content, but `overflow: hidden` above
+     waives that floor — so with the default shrink factor the panel took the
+     height it was short of out of both children in proportion to their size,
+     and a 1280px-tall clip next to one line of text meant the line lost two
+     thirds of itself to the clip. A question with a portrait video under it
+     read as a sentence sliced in half along the bottom of the panel.
+     Shrink 0 sends the whole deficit to the media, which has object-fit to
+     absorb it with; on a 1080p wall that costs the clip about 40px. */
+  flex: 0 0 auto;
+}
+
+/* Sized against the panel's own height as well as its width, so a six-line body
+   in a short panel shrinks instead of being cut off by the overflow above.
+   Clipped text on a projector is worse than small text: the room can see that a
+   sentence has been cut, and starts wondering what it said. */
+@supports (container-type: size) {
+  .stage__body {
+    font-size: calc(clamp(1.1rem, min(2.6cqw, 9cqh), 3.4rem) * var(--body-size, 1));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Where the body sits on the panel — 位置 / 对齐 / 字号 on the setup page.
+   The defaults (below / center / 1) are what every question rendered before
+   these existed, so an unpositioned question is untouched by all of it.
+--------------------------------------------------------------------------- */
+
+/* Horizontal alignment. align-items rather than text-align, because the
+   paragraph is capped at 26em and it is the box that has to move — text-align
+   alone would ragged the lines inside a box still sitting in the middle. Both
+   are set: the box goes to the edge and the lines follow it. */
+.stage--start {
+  align-items: flex-start;
+}
+.stage--start .stage__body,
+.stage--start .stage__over-text {
+  text-align: left;
+}
+.stage--end {
+  align-items: flex-end;
+}
+.stage--end .stage__body,
+.stage--end .stage__over-text {
+  text-align: right;
+}
+.stage--center .stage__body,
+.stage--center .stage__over-text {
+  text-align: center;
+}
+
+/* `over` — the text laid on the media instead of given a row of its own.
+   The wrapper is the flex child that the media used to be, so the picture keeps
+   the whole panel height and the paragraph costs the column nothing. */
+.stage__over {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-width: 100%;
+}
+
+/* The media is a column flex item everywhere else, where `flex: 0 1 auto` plus
+   `min-height: 0` is what makes it give up height. In here it is a ROW item, so
+   that shorthand governs its width instead and its own `max-height: 100%` has
+   no definite parent height to resolve against — it rendered at the clip's
+   intrinsic height and pushed straight out of the panel. Capping it here gives
+   the percentage something to resolve against and puts the media back to
+   absorbing the shrink. */
+.stage__over > .stage__video,
+.stage__over > .stage__image {
+  min-height: 0;
+  max-height: 100%;
+}
+
+.stage__over-text {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  padding: clamp(10px, 2cqh, 28px) clamp(12px, 2cqw, 32px);
+  /* Over a clip the panel's ink colour is unreadable and any flat plate is
+     ugly, so the text gets its own gradient scrim and turns white. Confined to
+     the strip the text occupies rather than the whole picture — the room is
+     still judging what is behind it. */
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0) 100%);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  pointer-events: none;
+}
+.stage--start .stage__over-text {
+  justify-content: flex-start;
+}
+.stage--center .stage__over-text {
+  justify-content: center;
+}
+.stage--end .stage__over-text {
+  justify-content: flex-end;
+}
+/* White, with the hard ink outline instead of a soft glow: it has to be read
+   over whatever the picture happens to be, and this look has no soft shadows
+   to do it with. */
+.stage__over-text .stage__body {
+  color: #fff;
+  text-shadow: var(--outline-2);
+}
+
+/* The options on the wall. A sibling of .stage, not part of it: the
+   stage holds the thing being judged and the cards are the ballot, and giving
+   them their own vertical budget is what stops a four-picture question from
+   squeezing the body text down to nothing. */
+.choices {
+  display: grid;
+  gap: clamp(10px, 1.4vw, 22px);
+  grid-template-columns: repeat(2, 1fr);
+  min-height: 0;
+  /* auto rows size to their content and refuse to shrink, which is the other
+     half of the spill: two rows of picture cards would overrun this grid's box
+     and paint straight into the reveal below it. minmax(0, 1fr) divides the
+     height the flex line actually gave us, and the 0 floor lets a row go to
+     nothing rather than to its min-content. */
+  grid-auto-rows: minmax(0, 1fr);
+}
+/* Fixed tracks per count rather than auto-fit: a projector must not reflow
+   because somebody made a label one character longer. */
+.choices[data-count="3"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+.choices[data-count="4"] {
+  grid-template-columns: repeat(4, 1fr);
+}
+.choices[data-count="5"],
+.choices[data-count="6"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+/* With pictures, area is the point: four go 2x2 so each card is tall enough to
+   read from the back row. */
+.choices--media[data-count="4"] {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* A card the shape of a button: the option's colour under an ink outline, on
+   a hard ink shadow. */
+.choice-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+  box-shadow: var(--shadow-hard);
+}
+
+.choice-card__media {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  /* The outline carries on between the picture and its label. */
+  border-bottom: var(--border-w) solid var(--line);
+  background: var(--well-2);
+}
+/* Absolutely positioned rather than height:100% in flow, so no percentage has
+   to resolve through a flex:1 parent — the one place browsers historically
+   disagree, and a projector in a venue is not where to find that out. */
+.choice-card__image,
+.choice-card__video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.choice-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The label row never gets squeezed; the picture above it absorbs the shrink. */
+  flex: 0 0 auto;
+  gap: 0.5em;
+  padding: clamp(6px, 1vh, 14px) clamp(8px, 1vw, 18px);
+  background: var(--key, var(--white));
+  color: var(--on-key);
+  font-size: clamp(1.1rem, 2.2vh, 2.2rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.choice-card__icon {
+  font-size: 1.2em;
+}
+.choice-card__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choice-card__sound {
+  opacity: 0.8;
+  font-size: 0.9em;
+}
+
+/* The share of the room on this option, drawn behind its own label in its own
+   colour — no chart, no legend, and no height taken from the wall. */
+.choice-card__foot {
+  position: relative;
+  overflow: hidden;
+}
+.choice-card__foot > * {
+  position: relative;
+  z-index: 1;
+}
+.choice-card__foot::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--pct, 0%);
+  background: rgba(0, 0, 0, 0.28);
+  /* Smooths the one-second steps of the poll into a slide. */
+  transition: width 0.3s ease;
+}
+.choice-card__pct {
+  margin-left: auto;
+  letter-spacing: 0;
+}
+
+/* Which option the room is hearing right now, while the clips play in turn.
+   Inset, so at six options the ring stops painting into the neighbour — and an
+   outline rather than a shadow, because an outline is drawn over the card's
+   own label row, where an inset shadow is hidden behind it. Yellow, the one
+   colour that is never an option's. */
+.choice-card.is-playing {
+  outline: 5px solid var(--alert);
+  outline-offset: -5px;
+}
+
+/* Reveal: how the room split, as one bar. */
+.reveal {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.6vh, 22px);
+}
+
+/* One bar, divided where the room divided. The position of the seam is the
+   whole story, and it reads instantly from the back row in a way two separate
+   bars do not.
+
+   Drawn as the design language's loading bar: a white box with the blue
+   outline and shadow, filled with blocks. The blocks are not elements. Each
+   segment is still one div whose inline width is its share, and the gaps are a
+   repeating gradient laid over all of them at once — so the gaps stay put
+   while the bar fills, and the widths remain the only thing that moves. */
+.split {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.2vh, 16px);
+}
+
+.split__bar {
+  --seg: clamp(22px, 2.6vw, 44px);
+
+  position: relative;
+  display: flex;
+  height: clamp(30px, 5vh, 62px);
+  padding: 3px;
+  border: var(--border-w) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+  overflow: hidden;
+}
+.split__bar::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(var(--seg) - 4px),
+    var(--white) calc(var(--seg) - 4px) var(--seg)
+  );
+  pointer-events: none;
+}
+
+/* One segment per option, in that option's own colour. */
+.split__seg {
+  background: var(--key);
+  transition: width 0.06s linear;
+}
+/* The seam itself, in ink: where one option stops and the next starts, to the
+   pixel, whichever block that happens to fall inside. */
+.split__seg + .split__seg {
+  box-shadow: -3px 0 0 var(--line);
+}
+
+.split__legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.split__side {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+/* Mirrored, so each number sits under its own end of the bar. */
+.split__side:last-child {
+  flex-direction: row-reverse;
+}
+
+/* vh, not vw. This number is the tallest thing in the reveal block and the
+   reveal block is what squeezes the wall — sizing it off the width meant it
+   grew on exactly the axis that was not the constraint. */
+.split__pct {
+  font-size: clamp(2.4rem, 8vh, 5rem);
+  font-weight: 400;
+  line-height: 1;
+  /* The colour of the segment it is the size of, inside an ink stroke — which
+     is what lets a yellow or a lilac number be read on this page at all. */
+  color: var(--key, var(--ink));
+  -webkit-text-stroke: max(2px, 0.035em) var(--line);
+  paint-order: stroke fill;
+  text-shadow: 0.05em 0.05em 0 var(--line);
+}
+
+.split__label {
+  font-size: clamp(1.1rem, 1.8vw, 2.1rem);
+  font-weight: 900;
+}
+.split__label .glyph {
+  margin-right: 0.3em;
+  color: var(--key, var(--ink));
+}
+
+/* Countdown: a full-width bar with the numeral at its right end. Kahoot's
+   arrangement, and it beats a centred number — the bar is readable
+   peripherally while people are reading the two texts.
+
+   The bar is the design language's loading meter: pink blocks for the time
+   still left, blue for what has gone. Both are repeating gradients with the
+   same period from the same edge, one on the track and one on the fill, so
+   they line up block for block and the fill's inline width is still the only
+   thing that moves. Its height is the height it has always had. */
+.countdown {
+  display: flex;
+  align-items: center;
+  gap: clamp(18px, 2.5vw, 40px);
+}
+
+.countdown__track {
+  --seg: clamp(20px, 2.2vw, 40px);
+
+  flex: 1;
+  height: clamp(16px, 2vh, 30px);
+  padding: 2px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(
+        90deg,
+        var(--blue-600) 0 calc(var(--seg) - 3px),
+        transparent calc(var(--seg) - 3px) var(--seg)
+      )
+      content-box,
+    var(--white);
+  box-shadow: 3px 3px 0 var(--line-brand);
+  overflow: hidden;
+}
+
+.countdown__fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--meter, var(--pink-400)) 0 calc(var(--seg) - 3px),
+    var(--white) calc(var(--seg) - 3px) var(--seg)
+  );
+}
+
+.countdown__number {
+  min-width: 2.4ch;
+  text-align: right;
+  color: var(--blue-600);
+  font-size: clamp(4rem, 13vh, 11rem);
+  font-weight: 400;
+  line-height: 0.85;
+  /* The pixel face, in its regular cut — the bold one closes the counters of
+     an 8 — with the thin ink stroke the big numerals get. The hard shadow is
+     a few pixels inside the wall's own side padding. */
+  -webkit-text-stroke: max(2px, 0.03em) var(--line);
+  paint-order: stroke fill;
+  text-shadow: 0.05em 0.05em 0 var(--line);
+}
+
+/* The last ten seconds turn red. They deliberately do NOT scale.
+
+   This used to be `animation: pulse 1s infinite`, which is transform:
+   scale(1) -> scale(1.07). On a phone that is a heartbeat. On the projector
+   the numeral is 117px tall and 237px wide, it is the last flex item, and it
+   sits hard against the right edge of the screen — so a 7% scale about the
+   default centre origin swings its right edge 8.3px outward and back, once a
+   second, for the whole final ten seconds. Measured, not guessed: right edge
+   1555.2px at rest, 1563.5px at peak, on a 1600x900 viewport.
+
+   Nothing reflows — transforms never do — and it never overflows far enough
+   to raise a scrollbar. It is purely that the biggest thing on the wall is
+   oscillating against a fixed edge, which from the room reads as the right
+   side of the screen juddering. It got filmed and reported as a fault.
+
+   The urgency still reads: the numeral goes from blue to red and the bar's
+   blocks from pink to red, which on a projector is unmissable. The beat moves to the bar below, where
+   nothing has an edge that can appear to move. */
+.countdown.is-urgent .countdown__number {
+  color: var(--danger);
+}
+
+.countdown.is-urgent .countdown__fill {
+  --meter: var(--danger);
+  /* Opacity only. It cannot move a box, cannot overflow, and cannot reflow —
+     and the bar is the element the layout comment above says is meant to be
+     read peripherally, which is exactly what a beat is for. */
+  animation: urgent-beat 1s ease-in-out infinite;
+}
+
+@keyframes urgent-beat {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+/* 投票结束 and 本题无人投票: a toast, centred on the wall. Yellow, because it is
+   the one thing on the screen that has just changed. */
+.screen__closed {
+  align-self: center;
+  padding: clamp(12px, 2vh, 26px) clamp(28px, 5vw, 96px);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--alert);
+  box-shadow: var(--shadow-hard);
+  color: var(--on-alert);
+  text-align: center;
+  font-size: clamp(2rem, 5vh, 3.8rem);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.screen__offline {
+  position: fixed;
+  top: clamp(12px, 1.6vh, 24px);
+  left: clamp(12px, 1.2vw, 24px);
+  width: clamp(10px, 0.9vw, 16px);
+  height: clamp(10px, 0.9vw, 16px);
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse 1.6s ease-in-out infinite;
+  z-index: 10;
+}
+
+/* Lobby */
+
+.lobby {
+  /* A stacking context of its own, so the decoration can sit behind the
+     content — z-index -1 — and still be in front of the page. */
+  position: relative;
+  z-index: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: clamp(28px, 5vw, 90px);
+  height: 100%;
+}
+
+/* The left column: the title block with the clock stacked under it, the pair
+   centred against the QR as one group.
+   The clock started life as a third grid row spanning both columns, which put
+   it structurally below the QR — and the QR is tall, so a centred block always
+   stranded the clock down by the bottom edge. Stacking it inside this column
+   instead lets it rise into the empty middle of the screen, which is where a
+   deadline the whole room is reading belongs. */
+.lobby__main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  /* Bias the column upward against the QR beside it. The QR is much taller
+     than this column, so centring the two against each other leaves the clock
+     — the last thing in the stack — sitting low on the wall. Reserving space
+     at the foot lifts the pair into the middle of the screen without moving
+     the QR, and collapses to nothing on a short viewport. */
+  margin-bottom: clamp(0px, 14vh, 170px);
+}
+
+/* The series ribbon, on its own line above the title. */
+.lobby__ribbon {
+  margin-bottom: clamp(6px, 1.4vh, 18px);
+  font-size: clamp(1.1rem, 2vw, 2.2rem);
+}
+
+.lobby__title {
+  margin: 0;
+  font-size: clamp(3rem, 8vw, 9rem);
+  /* Loose enough that the first line's offset shadow lands in the gap rather
+     than on the second line's glyphs. */
+  line-height: 1.15;
+}
+.lobby__sub {
+  margin: clamp(10px, 2vh, 26px) 0 0;
+  font-size: clamp(1.4rem, 2.2vw, 2.6rem);
+  font-weight: 800;
+  color: var(--ink-700);
+}
+
+.lobby__joined {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  margin: clamp(20px, 4vh, 56px) 0 0;
+  font-size: clamp(1.2rem, 1.9vw, 2.1rem);
+  font-weight: 800;
+  color: var(--ink-700);
+}
+
+/* The number that should pull the eye: pink, in the pixel face, outlined and
+   dropped like a title. Pink and not the accent yellow — yellow on this page
+   is not a colour text can be. */
+.lobby__count {
+  color: var(--pink-500);
+  font-size: clamp(3rem, 7vw, 7rem);
+  font-weight: 400;
+  line-height: 1;
+  -webkit-text-stroke: max(2px, 0.035em) var(--line);
+  paint-order: stroke fill;
+  text-shadow: 0.05em 0.05em 0 var(--blue-600);
+}
+
+/* The join countdown (#47). Deliberately smaller than .lobby__count: the number
+   that should pull the eye on this screen is how many people have joined, not
+   how long is left — the count is the social proof that makes the rest of the
+   room scan. The clock is the deadline under it, read second.
+   Only rendered while the operator has it running, so there is no stopped or
+   zeroed state to style. */
+.lobby__clock {
+  /* Centred across its column rather than left-aligned with the title, so it
+     reads as the room's deadline and not as a fourth line of the header. Only
+     ever rendered while the operator has the clock running, so there is no
+     stopped or zeroed state to style. */
+  align-self: center;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  margin: clamp(16px, 3.2vh, 44px) 0 0;
+  font-size: clamp(1.4rem, 2.2vw, 2.6rem);
+  font-weight: 800;
+  color: var(--ink-700);
+}
+
+.lobby__clock-face {
+  color: var(--blue-600);
+  font-size: clamp(3.2rem, 7vw, 7.5rem);
+  font-weight: 400;
+  line-height: 1;
+  /* Outlined, so that the colour inside can change to red without the number
+     getting any harder to read against the page. */
+  -webkit-text-stroke: max(2px, 0.03em) var(--line);
+  paint-order: stroke fill;
+  /* The pixel face is fixed-pitch in its digits, which is what stops every
+     tick of the seconds shifting the label beside it — and centred, that
+     jitter would move the whole row rather than just its tail. */
+}
+
+/* Same colour the question countdown turns, so it means the same thing on both
+   screens: you are nearly out of time. No flashing — this one sits under a QR
+   people are trying to point a camera at. */
+.lobby__clock.is-urgent .lobby__clock-face {
+  color: var(--danger);
+}
+
+/* A card like every other, around a code that is not: the white and the
+   near-black inside it are a scanner's, and stay literal whatever the page
+   wears. */
+.qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(12px, 1.5vw, 26px);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: 6px 6px 0 var(--blue-600);
+}
+
+.qr img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 40vh;
+}
+
+.qr__url {
+  color: #111;
+  font-size: clamp(0.75rem, 1.05vw, 1.2rem);
+  font-weight: 800;
+  word-break: break-all;
+  text-align: center;
+}
+
+.lobby__qr img {
+  max-width: min(40vw, 55vh);
+}
+
+/* Offline mode's lobby: the poster. There is no code to scan and nobody to
+   count, so the two columns become one, centred, and the title has the wall to
+   itself — at poster size, because a title sized to sit beside a QR looks
+   lost without one. A variant of the lobby, not a change to it: the grid
+   above is untouched for the room that is using its phones. */
+.lobby--poster {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+}
+/* The upward bias was there to balance the column against a QR card. */
+.lobby--poster .lobby__main {
+  margin-bottom: 0;
+}
+.lobby--poster .lobby__title {
+  font-size: clamp(4rem, 12vw, 13rem);
+}
+.lobby--poster .lobby__ribbon {
+  font-size: clamp(1.4rem, 2.6vw, 3rem);
+}
+
+/* The poster's furniture, for a title in the middle of the wall: bubbles to
+   either side of it and sparkles in the corners, the way the poster this look
+   comes from sets them. Shared by the offline lobby, the side screen and the
+   closing screen. */
+.deco--poster .deco__spark-1 {
+  left: 16%;
+  top: 10%;
+}
+.deco--poster .deco__spark-2 {
+  left: 4%;
+  top: 64%;
+}
+.deco--poster .deco__spark-3 {
+  left: 91%;
+  top: 76%;
+}
+.deco--poster .deco__spark-4 {
+  left: 12%;
+  top: 87%;
+}
+.deco--poster .deco__love {
+  left: 82%;
+  top: 36%;
+}
+.deco--poster .deco__heart {
+  left: 86%;
+  top: 8%;
+}
+.deco--poster .deco__typing {
+  left: 6%;
+  top: 33%;
+}
+
+/* Where the lobby's furniture goes. Everything is placed in the left column —
+   beside the title, or along the foot of the screen — because the right-hand
+   third belongs to the QR card from top to bottom, and nothing may sit on a
+   code a camera has to read from the back of the room. */
+.deco--lobby .deco__spark-1 {
+  left: 45%;
+  top: 5%;
+}
+.deco--lobby .deco__spark-2 {
+  left: 57%;
+  top: 41%;
+}
+.deco--lobby .deco__spark-3 {
+  left: 49%;
+  top: 73%;
+}
+.deco--lobby .deco__spark-4 {
+  left: 2%;
+  top: 91%;
+}
+.deco--lobby .deco__love {
+  left: 49%;
+  top: 14%;
+}
+.deco--lobby .deco__heart {
+  left: 43%;
+  top: 52%;
+}
+.deco--lobby .deco__typing {
+  left: 30%;
+  top: 90%;
+}
+
+/* Rules — full-bleed, replaces the lobby's join screen while shown. Each rule
+   is a card with its number in a yellow badge: a badge rather than a default
+   list marker, both because ::marker sizing is unreliable across browsers and
+   because a badge reads better at projector distance than a bare "1.". */
+.rules {
+  /* Its own stacking context, for the decoration — see .lobby. */
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  gap: clamp(16px, 3vh, 40px);
+}
+
+.rules__title {
+  margin: 0;
+  font-size: clamp(2.4rem, 5.5vw, 6rem);
+  line-height: 1.15;
+}
+
+.rules__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: rule;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.9vh, 24px);
+}
+
+.rules__item {
+  counter-increment: rule;
+  position: relative;
+  padding: clamp(6px, 1.2vh, 16px) clamp(14px, 1.6vw, 28px);
+  padding-left: clamp(3.4em, 5.4vw, 3.9em);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+  font-size: clamp(1.15rem, 1.9vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.55;
+}
+.rules__item::before {
+  content: counter(rule, decimal-leading-zero);
+  position: absolute;
+  left: clamp(10px, 1.2vw, 22px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.15em 0.45em;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--alert);
+  color: var(--on-alert);
+  font-family: var(--font-pixel);
+  font-size: 0.78em;
+  font-weight: 400;
+  letter-spacing: var(--ls-pixel);
+  line-height: 1.2;
+}
+
+/* The rules' furniture: along the title row, to the right of the title, and in
+   the two bottom corners — clear of the cards, which run the full width. */
+.deco--rules .deco__spark-1 {
+  left: 30%;
+  top: 9%;
+}
+.deco--rules .deco__spark-2 {
+  right: 3%;
+  top: 4%;
+}
+.deco--rules .deco__spark-3 {
+  left: 1%;
+  bottom: 3%;
+}
+.deco--rules .deco__spark-4 {
+  right: 22%;
+  bottom: 4%;
+}
+.deco--rules .deco__love {
+  right: 9%;
+  top: 6%;
+}
+.deco--rules .deco__heart {
+  right: 30%;
+  top: 6%;
+}
+.deco--rules .deco__typing {
+  right: 19%;
+  top: 9%;
+}
+
+/* Final */
+
+.final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 1.8vh, 26px);
+  height: 100%;
+}
+
+.final__label {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.6vw, 4rem);
+  line-height: 1.2;
+}
+
+/* The recap is the whole of this screen now that no headline number sits above
+   it, so the rows are sized to be read from the back row rather than as a
+   footnote under one. */
+.final__rows {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.7vh, 20px);
+  width: min(88vw, 1400px);
+  margin-top: clamp(10px, 2.5vh, 36px);
+}
+
+/* A card per question. Four fixed tracks, in fractions rather than auto: every
+   row is its own grid, and with auto each would size its columns to its own
+   topic — so the bars would start at a different place on every line and stop
+   being comparable, which is the one thing a column of bars is for. The first
+   track holds a two-digit badge, which is the same width on every row. */
+.final__row {
+  display: grid;
+  grid-template-columns: 2.9em minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1.4fr);
+  align-items: center;
+  gap: clamp(10px, 1.2vw, 24px);
+  padding: clamp(4px, 0.9vh, 10px) clamp(10px, 1.2vw, 20px);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+  font-size: clamp(1rem, 1.7vw, 2rem);
+  font-weight: 700;
+}
+
+.final__index {
+  justify-self: start;
+  font-size: 0.72em;
+}
+
+.final__topic {
+  overflow: hidden;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.final__bar {
+  --seg: clamp(14px, 1.5vw, 26px);
+
+  position: relative;
+  display: flex;
+  height: clamp(16px, 2.8vh, 32px);
+  padding: 2px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: 4px;
+  background: var(--white);
+  overflow: hidden;
+}
+/* The same blocks as the reveal bar, cut the same way. */
+.final__bar::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(var(--seg) - 3px),
+    var(--white) calc(var(--seg) - 3px) var(--seg)
+  );
+  pointer-events: none;
+}
+
+/* The reveal's segments again, a row high. */
+.final__seg {
+  background: var(--key);
+}
+.final__seg + .final__seg {
+  box-shadow: -2px 0 0 var(--line);
+}
+
+.final__split {
+  font-size: 0.86em;
+  font-weight: 800;
+}
+
+/* The end of an offline show: a thank-you where the recap would be, set as the
+   poster is. */
+.closing {
+  /* Its own stacking context, for the decoration — see .lobby. */
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.4vh, 18px);
+  height: 100%;
+  text-align: center;
+}
+.closing__ribbon {
+  font-size: clamp(1.4rem, 2.6vw, 3rem);
+}
+.closing__title {
+  margin: 0;
+  font-size: clamp(4rem, 13vw, 14rem);
+  line-height: 1.15;
+}
+
+/* A 4:3 projector and a laptop preview have the same problem: the chrome was
+   sized for 1080 lines. Everything fixed gets cheaper here; the ratios above do
+   not change, because they are already relative to whatever is left. */
+@media (max-height: 820px) {
+  .screen {
+    gap: clamp(8px, 1.2vh, 16px);
+    padding: clamp(10px, 1.4vh, 20px) clamp(16px, 2.4vw, 40px);
+  }
+  .countdown__number {
+    font-size: clamp(2.6rem, 11vh, 6rem);
+  }
+  .split__bar {
+    height: clamp(18px, 4vh, 36px);
+  }
+  .screen__closed {
+    font-size: clamp(1.4rem, 4vh, 2.6rem);
+  }
+}
+
+/* Portrait projector or a laptop preview: stack rather than overflow. */
+@media (max-aspect-ratio: 1/1) {
+  .screen__works {
+    grid-template-columns: 1fr;
+  }
+  .lobby {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+  /* Two pictures side by side on a portrait wall are two thin strips. */
+  .choices--media[data-count="2"] {
+    grid-template-columns: 1fr;
+  }
+  .screen__title {
+    -webkit-line-clamp: 3;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Admin  —  /admin?k=
+   Built for a phone held in one hand, in the dark, while presenting.
+   Status on top, the one action you probably want at the bottom under a thumb.
+--------------------------------------------------------------------------- */
+
+.admin {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: max(12px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom)) 12px;
+}
+
+/* Something is wrong and the host has to read what. A white card, so the
+   sentence is ink on white like every other sentence here, marked as trouble
+   by what it stands on and what leads it: a red shadow and a red badge. A
+   solid red box would say "danger" louder and its text less clearly. */
+.admin__alarm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: 5px 5px 0 var(--danger);
+  font-weight: 800;
+  line-height: 1.55;
+}
+.admin__alarm::before {
+  content: "!";
+  flex: none;
+  padding: 0 0.5em;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--danger);
+  color: var(--on-danger);
+  font-family: var(--font-pixel);
+  font-weight: 700;
+}
+
+/* Offline mode, said once and loudly at the top of the console for as long as
+   it is on. Blue, so it is neither an alarm nor the yellow button the thumb is
+   looking for. */
+.admin__mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--blue-600);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--white);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.admin__mode strong {
+  padding: 2px 10px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--alert);
+  color: var(--on-alert);
+  font-size: 1rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin__status {
+  display: grid;
+  /* Three, so the six tiles make two full rows. It was five, and a fifth of
+     this column is narrower than the phase badge: "VOTING 到时" cannot wrap,
+     so it ran out of its own tile and under 题目. The phone rule further down
+     folds this to two columns, which is where the operator actually reads
+     it. */
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+}
+
+.admin__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: 3px 3px 0 var(--blue-600);
+}
+
+.admin__stat-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+
+/* The value, in the pixel face: a phase, a counter, a clock. */
+.admin__stat strong {
+  font-family: var(--font-pixel);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+/* Out of time. A red box rather than red text: red on white is too faint to be
+   the thing that tells the host to move. */
+.admin__stat strong.is-urgent {
+  padding: 0 6px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+/* Idle segment clock: this is the length it will run for, not something
+   happening right now, so it reads as quieter than every other live number
+   on this row. */
+.admin__stat strong.is-dim {
+  color: var(--ink-dim);
+}
+
+/* The phase, as a badge whose colour changes with it, so the host knows where
+   the show is from the corner of an eye: pale while nothing is open, pink
+   while the room is voting, dark once it is locked, yellow at the reveal. */
+.admin__stat strong[class^="admin__phase--"] {
+  padding: 0 6px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--well-2);
+}
+.admin__stat strong.admin__phase--VOTING {
+  background: var(--pink-500);
+  color: var(--white);
+}
+.admin__stat strong.admin__phase--LOCKED {
+  background: var(--ink-700);
+  color: var(--white);
+}
+.admin__stat strong.admin__phase--REVEAL {
+  background: var(--alert);
+  color: var(--on-alert);
+}
+.admin__stat strong.admin__phase--FINAL {
+  background: var(--ok);
+}
+
+/* Which question is loaded, before the operator commits to starting it.
+   topic is the question's short name — the label says so, so nobody takes it
+   for the question itself and reads it out as one. The room sees it too, but
+   only on the final recap. */
+.admin__question {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+
+.admin__question-topic {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.admin__question-topic::before {
+  content: "短标题 · ";
+}
+
+.admin__question-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.admin__tally {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+
+/* What the tally card says when there is no tally to keep. */
+.admin__tally-note {
+  margin: 0;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.admin__tally-row {
+  display: grid;
+  /* Room for an authored label, but capped: the bar is what the operator reads
+     at a glance, and a long option name must not squeeze it off the phone. */
+  grid-template-columns: minmax(4ch, 9ch) 1fr 9ch;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Ink, with the option's colour beside it as a swatch. The colour used to be
+   the text itself, and a yellow option's name could not be read on white. */
+.admin__tally-label {
+  overflow: hidden;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin__tally-label::before {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.4em;
+  border: var(--border-w-thin) solid var(--line);
+  background: var(--key, var(--white));
+}
+
+.admin__tally-bar {
+  height: 18px;
+  padding: 2px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: 4px;
+  background: var(--white);
+  overflow: hidden;
+}
+
+/* The option's colour in blocks, like every other meter. */
+.admin__tally-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--key, var(--ink-dim)) 0 9px,
+    var(--white) 9px 12px
+  );
+  transition: width 0.3s ease;
+}
+
+.admin__tally-count {
+  text-align: right;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.admin__tally-total {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+.admin__tally-total .num {
+  color: var(--ink);
+}
+
+.admin__note {
+  padding: 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+/* Its heading as a yellow badge: this is the card to glance at before
+   speaking. */
+.admin__note .admin__stat-label {
+  display: inline-block;
+  padding: 1px 8px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--alert);
+  color: var(--on-alert);
+}
+.admin__note p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+
+/* Everything below sits in the thumb zone. */
+.admin__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+}
+
+/* The one action the operator almost certainly wants next, big enough to hit
+   without looking down. */
+.admin__primary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 92px;
+  padding: 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--alert);
+  box-shadow: var(--shadow-hard);
+  color: var(--on-alert);
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.admin__primary:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--line);
+}
+/* Not yet, rather than faded. The hint under the label is the sentence that
+   says why the button is dead — "wait for the countdown" — and dimming the
+   whole button would dim the one thing the host needs to read on it. So it
+   goes flat and dashed instead: no colour, no shadow, nothing to press. */
+.admin__primary:disabled {
+  border-style: dashed;
+  background: var(--white);
+  box-shadow: none;
+  color: var(--ink-dim);
+}
+.admin__primary-label {
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+.admin__primary-hint {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.admin__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.admin__button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 74px;
+  padding: 10px 6px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-sm);
+  text-align: center;
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.admin__button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+.admin__button:disabled {
+  box-shadow: none;
+  opacity: 0.4;
+}
+
+/* A transport mark in the pixel face, or a pixel icon — both blue, both the
+   same height so the labels under them line up across the row. */
+.admin__button-icon {
+  display: flex;
+  align-items: center;
+  height: 1.5rem;
+  color: var(--blue-600);
+  font-family: var(--font-pixel);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.admin__button-icon .px-icon {
+  font-size: 1.5rem;
+}
+.admin__button-label {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+/* The segment clock's own controls, below the grid above rather than in it —
+   see #34/#36. Its shape changes with the clock's mode (idle/running/paused),
+   so it cannot share a fixed slot the way the six show buttons do; keeping it
+   a full row below them is what keeps those six from shifting under it. */
+.admin__timer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin__timer-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* The join clock's block, under the segment clock's. A rule between them, not
+   just a gap: these are two different clocks with two different audiences, and
+   the operator is reading this in the dark. The one below is the one the room
+   can see. */
+.admin__timer--join {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: var(--border-w-thin) dashed var(--line-brand);
+}
+
+/* The custom length field, beside the 1/3/5 chips it exists to go past.
+   Present only while the clock is stopped. */
+.admin__timer-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin__timer-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: var(--border-w) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+}
+.admin__timer-input:focus-visible {
+  border-color: var(--pink-500);
+  box-shadow: 3px 3px 0 var(--pink-500);
+  outline: none;
+}
+/* The spinners are a 12px hit target on a phone held in the dark, and the
+   chips and ±1 分钟 already cover stepping. Typing is what this field is for. */
+.admin__timer-input::-webkit-inner-spin-button,
+.admin__timer-input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.admin__timer-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.admin__timer-unit {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ink-dim);
+}
+
+.admin__timer-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--blue-600);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--white);
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.admin__timer-action:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+.admin__timer-action:disabled {
+  box-shadow: none;
+  opacity: 0.4;
+}
+
+/* Reset reads as the destructive one of the pair — same outline-only treatment
+   admin__back uses — so 暂停/继续 stays the button a thumb finds first. */
+.admin__timer-action--ghost {
+  background: var(--white);
+  color: var(--ink);
+}
+
+/* Back is the recovery control and lives on its own row, away from Reveal and
+   Next — those two are irreversible and a mis-hit costs the segment. */
+.admin__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-sm);
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.admin__back:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+.admin__back:disabled {
+  box-shadow: none;
+  opacity: 0.4;
+}
+
+.admin__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* The small button: copy, open, upload, reset. White, outlined, and quiet. */
+.admin__reset {
+  padding: 7px 13px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: 2px 2px 0 var(--line);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.admin__reset:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+.admin__reset:disabled {
+  box-shadow: none;
+  opacity: 0.45;
+}
+
+.admin__error {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--on-danger);
+  font-weight: 900;
+  z-index: 20;
+}
+
+/* Content editor */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+
+/* Inside the editor a label names a field somebody is about to fill in, so it
+   is ink and a readable size — not the small grey caption it is on the
+   operator's status tiles. */
+.editor .admin__stat-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.editor__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* One tab per question, in a lilac tray; the open one is pink. */
+.editor__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-right: auto;
+  padding: 4px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--well-2);
+}
+
+.editor__tab {
+  width: 36px;
+  height: 36px;
+  border: var(--border-w-thin) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-700);
+  font-family: var(--font-pixel);
+}
+.editor__tab.is-active {
+  border-color: var(--line);
+  background: var(--pink-500);
+  box-shadow: 2px 2px 0 var(--line);
+  color: var(--white);
+}
+.editor__tab--add {
+  border: var(--border-w-thin) dashed var(--line-brand);
+  color: var(--blue-600);
+  cursor: pointer;
+}
+.editor__tab--add:disabled {
+  opacity: 0.35;
+}
+
+.editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The design language's input: white, a blue outline, and a pink one with a
+   hard pink shadow while it has the focus. */
+.editor input,
+.editor textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: var(--border-w) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+.editor input:focus-visible,
+.editor textarea:focus-visible {
+  border-color: var(--pink-500);
+  box-shadow: 3px 3px 0 var(--pink-500);
+  outline: none;
+}
+/* The slider is an input too, and must not be dressed as a text box. */
+.editor input[type="range"] {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.editor__sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.editor__side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: var(--radius-md);
+  background: var(--well-1);
+}
+
+/* The same slot, sized for a drawer inside an option row rather than for the
+   question's own media. Six of these can be on screen at once. */
+.editor__side--compact {
+  gap: 6px;
+  padding: 8px;
+}
+.editor__side--compact .editor__preview {
+  max-height: 96px;
+}
+.editor__side--compact .editor__hint {
+  font-size: 0.72rem;
+}
+
+.editor__side-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor__side-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.editor__preview {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--well-2);
+}
+
+.editor__foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.editor__save {
+  padding: 11px 22px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--pink-500);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--white);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast);
+}
+.editor__save:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+.editor__save:disabled {
+  box-shadow: none;
+  opacity: 0.45;
+}
+
+/* Destructive, and sitting next to the button pressed every few minutes — so
+   it is outlined rather than filled, and confirms before it does anything. */
+.editor__delete {
+  margin-left: auto;
+  padding: 11px 18px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: 3px 3px 0 var(--danger);
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+.editor__delete:not(:disabled):hover {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.editor__delete:disabled {
+  box-shadow: none;
+  opacity: 0.4;
+}
+
+/* What just happened, as a badge: green for done, red for not. Filled boxes
+   with ink outlines — neither colour is readable as bare text on this page. */
+.editor__status--ok,
+.editor__status--bad {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.editor__status--ok {
+  background: var(--ok);
+  color: var(--ink);
+}
+.editor__status--bad {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.editor__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+
+/* ---------------------------------------------------------------------------
+   正文 position, and the projector preview beside it  —  /admin
+--------------------------------------------------------------------------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: var(--radius-md);
+  background: var(--well-1);
+}
+
+.layout__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.layout__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.layout__chip {
+  padding: 6px 11px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.layout__chip.is-on {
+  background: var(--pink-500);
+  box-shadow: 2px 2px 0 var(--line);
+  color: var(--white);
+}
+.layout__chip:disabled {
+  opacity: 0.5;
+}
+
+.layout__slider {
+  width: 100%;
+  accent-color: var(--pink-500);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The frame is the visible box; .preview__scale inside it is a full-size
+   projector shrunk to fit. aspect-ratio rather than a height, so the frame
+   tracks whatever width the admin column gives it and the scale below stays
+   exact at every browser size. */
+.preview__frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+/* The wall's own backdrop, on the miniature wall. It goes on the .screen in
+   here rather than on the frame so that it is scaled down with everything
+   else, grid and all. */
+.preview__frame .screen {
+  background-image: var(--bg-image);
+  background-size: var(--bg-size);
+}
+
+/* 1600x900 is a projector, not a thumbnail, and that is the point: every length
+   inside .screen is relative to the viewport or to the panel — vw, vh, cqw, cqh
+   — so a box that is merely narrow resolves all of them differently and shows a
+   layout the room will never see. Rendered at full size and scaled down, the
+   proportions are the real ones.
+
+   --preview-scale is measured in JS (see StagePreview) rather than derived here,
+   because a unitless ratio is what scale() takes and CSS cannot divide one
+   length by another to produce one.
+
+   cqw/cqh still resolve against .stage's own box, which scales with everything
+   else here, so the body text lands at the same fraction of the panel it will
+   occupy on the wall. */
+.preview__scale {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1600px;
+  height: 900px;
+  transform: scale(var(--preview-scale, 0.25));
+  transform-origin: top left;
+}
+
+/* The preview is a picture of the wall, not a control surface. Nothing in it is
+   clickable, and a stray tab stop into a fake ballot would be baffling. */
+.preview__scale * {
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .editor__sides {
+    grid-template-columns: 1fr;
+  }
+  .admin__status {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.admin--prompt {
+  justify-content: center;
+}
+.admin--prompt form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.admin--prompt input {
+  padding: 14px;
+  border: var(--border-w) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}
+.admin--prompt input:focus-visible {
+  border-color: var(--pink-500);
+  box-shadow: 3px 3px 0 var(--pink-500);
+  outline: none;
+}
+.admin--prompt button {
+  padding: 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--pink-500);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--white);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+/* Deliberately not .admin__error, which is a fixed-position toast pinned to the
+   bottom of the viewport. This one belongs to the form, under the field it is
+   about, and has to survive being read on a phone in a dark room. */
+.admin__prompt-error {
+  margin: 0;
+  padding: 12px 14px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: 4px 4px 0 var(--danger);
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Setup  —  /admin
+   Opened before the event: hands out the three room links and is where the
+   question content is written.
+--------------------------------------------------------------------------- */
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 900px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+}
+
+.setup__head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.setup__title {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1.25;
+}
+
+/* Offline mode: a card to itself above the links, with the switch at its
+   right-hand end. It turns yellow while the mode is on — a host scrolling past
+   should not have to read the switch to know. */
+.mode {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+.mode.is-on {
+  background: var(--yellow-300);
+}
+.mode__body {
+  flex: 1;
+  min-width: 0;
+}
+.mode__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+.mode__hint {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--ink-700);
+}
+.mode__locked,
+.mode__error {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 2px 8px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.mode__locked {
+  background: var(--well-2);
+}
+.mode__error {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.mode__control {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+/* Half as big again as the design language draws it: this is the one switch
+   in the app, and it decides how the whole room is run. */
+.mode .switch {
+  font-size: 24px;
+}
+.mode__state {
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.links {
+  display: grid;
+  gap: 12px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard-blue);
+}
+/* The one the room uses, picked out by standing on pink. */
+.link--wide {
+  box-shadow: var(--shadow-hard-pink);
+}
+
+/* The audience link while the room is offline: still there, and visibly out
+   of use — a flat grey shadow, a faded code, and a label saying why. */
+.link--off {
+  box-shadow: 5px 5px 0 var(--ink-300);
+}
+.link--off .link__qr {
+  opacity: 0.3;
+}
+.link__off {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--well-3);
+  font-size: 0.75rem;
+  font-weight: 800;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.link__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.link__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 900;
+}
+
+.link__hint {
+  margin: 4px 0 10px;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.link__url {
+  display: block;
+  padding: 9px 12px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--well-1);
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+/* The operator link carries the key. It is on screen because the operator has
+   to get it onto their phone somehow, but it should look like a secret. */
+.link__url--secret {
+  border: var(--border-w-thin) dashed var(--danger);
+}
+
+.link__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.link__actions a {
+  text-decoration: none;
+}
+
+.link__qr {
+  flex: 0 0 auto;
+  padding: 10px;
+  box-shadow: var(--shadow-hard-sm);
+}
+.link__qr img {
+  width: clamp(120px, 22vw, 190px);
+  height: auto;
+}
+
+.setup__foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+
+.editor__audio {
+  width: 100%;
+}
+
+@media (max-width: 620px) {
+  .link {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .link__qr {
+    align-self: center;
+  }
+}
+
+/* Audio on the projector. It has to be visible enough that the operator can
+   tell whether the room is hearing anything, without competing with the text. */
+.audio {
+  display: flex;
+  justify-content: center;
+}
+
+.audio__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--blue-600);
+  box-shadow: var(--shadow-hard-sm);
+  color: var(--white);
+  font-size: clamp(1rem, 1.5vw, 1.5rem);
+  font-weight: 900;
+}
+
+.audio__icon {
+  font-size: 1.4em;
+  line-height: 1;
+}
+.audio__icon.is-playing {
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+/* Unplayed audio is a dead question — make it impossible to miss. */
+.audio--blocked .audio__button {
+  background: var(--danger);
+  color: var(--on-danger);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.quiz__media-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--panel-ink-dim);
+}
+
+/* Options and duration, set right where the content is written. */
+.answer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: var(--radius-md);
+  background: var(--well-1);
+}
+
+.answer__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.answer__durations {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* A chip: one of a row of choices. White until chosen, pink once it is. Used
+   for countdown lengths here and for the two clocks on the operator console. */
+.answer__pick {
+  padding: 8px 14px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--font-pixel);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.answer__pick:disabled {
+  opacity: 0.4;
+}
+.answer__pick.is-set {
+  background: var(--pink-500);
+  box-shadow: 2px 2px 0 var(--line);
+  color: var(--white);
+}
+
+/* The custom box wears the preset's chrome so the row reads as one set of
+   choices, with the input itself stripped bare inside it. */
+.answer__custom {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 0 16px;
+}
+.answer__custom:has(input:disabled) {
+  opacity: 0.4;
+}
+.answer__custom:focus-within {
+  border-color: var(--pink-500);
+  box-shadow: 2px 2px 0 var(--pink-500);
+}
+/* The box inside it is bare, focus and all: the chip around it is what shows
+   the focus. */
+.editor .answer__custom input,
+.editor .answer__custom input:focus-visible {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.answer__custom input {
+  width: 4ch;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+.answer__custom input:focus {
+  outline: none;
+}
+/* No spinners: they are a mis-click away from changing the countdown, and the
+   arrows are unusable at this size anyway. */
+.answer__custom input::-webkit-outer-spin-button,
+.answer__custom input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.answer__custom input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ---------------------------------------------------------------------------
+   The option editor: what the phones put on their buttons
+--------------------------------------------------------------------------- */
+
+.answer__row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: var(--border-w-thin) solid var(--line-brand);
+  border-radius: var(--radius-md);
+  background: var(--well-2);
+}
+.option.has-media-open {
+  background: var(--well-3);
+}
+
+/* One toggle rather than three upload buttons: the row is a list of options
+   first, and three cards per option would bury that. The badge is how you see
+   an option has a picture without opening anything. */
+.option__media-toggle {
+  position: relative;
+  padding: 6px 10px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: 2px 2px 0 var(--line);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.option__media-toggle.is-open,
+.option__media-toggle:hover {
+  background: var(--alert);
+  color: var(--on-alert);
+}
+.option__media-count {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  min-width: 18px;
+  padding: 0 3px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--pink-500);
+  color: var(--white);
+  font-family: var(--font-pixel);
+  font-size: 0.62rem;
+  font-weight: 400;
+  line-height: 14px;
+}
+
+/* The drawer spans the whole row rather than squeezing into a column, so the
+   three slots stay the same component the question's own media uses. */
+.option__media {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+@media (max-width: 720px) {
+  .option__media {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The icon box is a miniature of the button the phone will draw: the option's
+   colour, with the icon on it in the colour the label will be. */
+.editor .option__icon {
+  padding: 6px 4px;
+  border: var(--border-w-thin) solid var(--line);
+  background: var(--key, var(--white));
+  color: var(--on-key);
+  font-family: "Poll Glyphs", "Silkscreen", var(--font-system);
+  font-size: 1.15rem;
+  font-weight: 400;
+  line-height: 1.3;
+}
+.editor .option__label {
+  font-weight: 800;
+}
+.option__icon {
+  text-align: center;
+}
+
+/* The emoji cell owns the palette, so the palette can hang off it without
+   widening the row's 3.5rem column. */
+.option__emoji {
+  position: relative;
+}
+.option__emoji .option__icon {
+  width: 100%;
+}
+
+.emoji-pop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: max-content;
+  max-width: min(19rem, 78vw);
+  padding: 12px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  box-shadow: var(--shadow-hard);
+}
+.emoji-pop__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.emoji-pop__name {
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+.emoji-pop__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.emoji-pop__pick {
+  width: 2rem;
+  height: 2rem;
+  border: var(--border-w-thin) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: "Poll Glyphs", var(--font-system);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.emoji-pop__pick:hover {
+  background: var(--well-2);
+}
+.emoji-pop__pick.is-set {
+  border-color: var(--line);
+  background: var(--alert);
+}
+.emoji-pop__clear {
+  padding: 6px 10px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.emoji-pop__clear:disabled {
+  opacity: 0.35;
+}
+
+.option__remove {
+  width: 32px;
+  height: 32px;
+  justify-self: center;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+.option__remove:not(:disabled):hover {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+.option__remove:disabled {
+  opacity: 0.25;
+}
+
+.options__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editor__pair {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+}
+
+@media (max-width: 620px) {
+  .editor__pair {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "love-opinion-poll",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Repo-level scripts. The app itself lives in backend/ and frontend/.",
+  "scripts": {
+    "content": "node scripts/build-content.mjs",
+    "content:check": "node scripts/build-content.mjs --check",
+    "test": "npm --prefix backend test && node --test frontend/src/lib/choices.test.js",
+    "smoke": "./scripts/smoke.sh",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6"
+  }
+}

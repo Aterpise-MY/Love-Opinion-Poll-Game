@@ -1,0 +1,39 @@
+# infra/.terraform alone is 682MB of provider binaries — 94% of the repo.
+# Without this line every build ships all of it to the daemon.
+infra
+
+.git
+.claude
+.playwright-mcp
+
+node_modules
+**/node_modules
+
+# The builder produces a fresh one; a stale dist would silently win.
+frontend/dist
+backend/public
+frontend/public/uploads
+
+*.md
+# The design language reference: one 10MB packed page in the app root that no
+# build stage reads. A bare pattern here matches the context root only, so
+# frontend/index.html — which the build very much needs — is untouched.
+*.html
+*.tfstate*
+terraform.tfvars
+.DS_Store
+**/.DS_Store
+Dockerfile
+.dockerignore
+
+# The admin key lives in .env, and docker compose reads it from the host at
+# `up` — the build never needs it, so it never enters the build context.
+.env
+.env.*
+
+# NOT excluded on purpose:
+#   backend/*.test.js, backend/deck.test.json  (~20KB)
+# They let you run the unit suite inside the exact runtime image
+#   docker run --entrypoint node <image> --test
+# and give smoke.sh 2-second questions, turning a 50-second EXPIRED wait
+# into a 4-second one.

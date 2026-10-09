@@ -1,0 +1,211 @@
+# Run the checks, and only if every one of them passes: build the ARM64 image,
+# push it to ECR, and roll the ECS service onto it.
+#
+# Two jobs, and the order is the whole design. `ci` is ci.yml, called as it
+# stands — the same five checks a pull request gets, run on the commit that is
+# about to ship. `deploy` needs it, so one red check ends the run before
+# anything here has asked AWS for a credential. A merge is not evidence that
+# the checks passed: master can be pushed to without a pull request, and two
+# green pull requests can still combine into a tree neither of them tested.
+#
+# Terraform is deliberately not involved. This workflow registers a new task
+# definition revision from the one already running and points the service at
+# it — so it can deploy code without holding the state file, and infrastructure
+# changes stay a human, laptop-side decision via scripts/deploy.sh.
+#
+# READ THIS BEFORE A SHOW: every push to master deploys. A rolling deployment
+# runs two image versions at once for 30-90 seconds, and a phone that loaded
+# index.html from the old task will 404 on its asset from the new one. Freeze
+# deploys two hours out — disable this workflow, or protect the `production`
+# environment with a required reviewer.
+
+name: build and deploy
+
+on:
+  push:
+    branches: [master]
+    # Docs never change the image, and a rolling deploy is never free.
+    paths-ignore:
+      - "**/*.md"
+      - ".gitignore"
+      - "infra/**"
+  workflow_dispatch:
+
+# One rollout at a time. Two pushes a minute apart would otherwise have two
+# rolling deployments fighting each other for capacity on the same service.
+# Never cancel in flight: a half-finished rollout is worse than a slow one.
+#
+# On the whole run rather than on the deploy job, and that is a choice. A
+# job's group is joined when the job becomes ready, which here is when its
+# checks finish — and a group keeps one waiting entry, the latest to arrive,
+# cancelling the one before it. So of two runs queued behind a rollout, the
+# survivor would be whichever finished its checks LAST, and that can be the
+# older commit. A run's group is joined when the run is created: runs go in
+# push order and the one left waiting is always the newest. The price is that
+# a second push does not start its checks until the rollout ahead of it is
+# done.
+#
+# Do not put this group on the deploy job as well. The run already holds it,
+# and a job waiting on a group its own run is holding is a deadlock that
+# GitHub resolves by cancelling the run.
+concurrency:
+  group: deploy-ecs
+  cancel-in-progress: false
+
+# The floor for every job, and all that the checks get. The one permission
+# that matters is granted on the deploy job alone.
+permissions:
+  contents: read
+
+jobs:
+  # ci.yml, exactly as a pull request runs it: content, backend tests, frontend
+  # build, lint and format, image build. Nothing is passed in. With no
+  # `secrets:` here the called jobs see no repository secret, and with
+  # contents: read as the whole grant none of them can request an OIDC token —
+  # a called workflow cannot hold a permission its calling job does not.
+  ci:
+    # workflow_dispatch can be aimed at any branch from the Actions page. Only
+    # master ships, so on anything else there is nothing for these to gate.
+    if: github.ref == 'refs/heads/master'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  deploy:
+    name: build → ECR → ECS
+    # All five, or nothing. One failed or cancelled check and `ci` has not
+    # succeeded, and a job whose need did not succeed is skipped — it is never
+    # queued, never asks for the environment, and never reaches the step that
+    # requests a token.
+    needs: ci
+    # success() is what `needs` already implies; it is written out so that the
+    # ref test beside it cannot be read as replacing it. The ref test repeats
+    # the one on `ci` on purpose, so that this job's refusal to ship a branch
+    # does not hang on another job's condition.
+    #
+    # It is a guard against a mis-aimed manual run, not a security boundary: a
+    # branch carries its own copy of this file and can delete the line. What
+    # actually stops a branch deploying is a deployment-branch rule on the
+    # `production` environment, which lives in the repository settings.
+    if: success() && github.ref == 'refs/heads/master'
+    # ARM64 native, because ecs.tf pins runtime_platform.cpu_architecture to
+    # ARM64. An x86 runner with QEMU produces the same image, but this
+    # Dockerfile runs two `npm ci` passes and a Vite build — emulated that is
+    # minutes, native it is under one.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    environment: production
+
+    # The only job in this workflow that can request an OIDC token, and so the
+    # only one that can become the deploy role. Job-level permissions replace
+    # the workflow's rather than adding to them, hence contents: read again —
+    # the checkout needs it.
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      # Straight to the build. The content check and the unit tests that used
+      # to open this job ran a moment ago in `ci`, on this same commit — both
+      # jobs check out github.sha — and the content check runs a third time
+      # inside the image build (Dockerfile step 1). Dropping them here is not
+      # only tidying: this is the job that can mint a token, and it no longer
+      # runs `npm ci` on the runner, where a dependency's install script would
+      # execute with everything this job can reach.
+      - uses: actions/checkout@v4
+
+      # Timestamp first so tags sort chronologically in the ECR console, short
+      # SHA second so a running task can be traced back to a commit. ECR is
+      # image_tag_mutability = IMMUTABLE, so this must be unique per run —
+      # a bare ${{ github.sha }} would make "re-run job" fail on a tag that
+      # already exists.
+      - name: Compute image tag
+        id: tag
+        run: echo "value=$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.tag.outputs.value }}
+          # Both off, and not optional. This action defaults provenance on,
+          # which wraps the image in an OCI index that Fargate cannot pull —
+          # it surfaces as "image Manifest does not contain descriptor
+          # matching platform" long after the build looked successful.
+          provenance: false
+          sbom: false
+          # The `image` check wrote this same cache, from this same commit,
+          # minutes ago — see the note on its build step in ci.yml. So this is
+          # normally that build replayed from cache and pushed. The write stays
+          # for the runs where it is not: a re-run of this job alone, days
+          # later, after the entries have been evicted.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Start from what is actually running, not from a file in the repo, so
+      # this cannot silently revert a setting someone changed in Terraform.
+      # describe-task-definition returns fields register-task-definition
+      # rejects, hence the jq.
+      - name: Read the running task definition
+        run: |
+          # pipefail is load-bearing. The step's exit status is jq's, and jq
+          # given empty stdin exits 0 having written nothing — so a failed aws
+          # call leaves an EMPTY task-definition.json and this step still goes
+          # green. The error then surfaces in the NEXT step as
+          #
+          #   task-definition.json: Unexpected end of JSON input
+          #
+          # which points at a file the render action never had a chance to
+          # read, and says nothing about the AccessDenied or ClientException
+          # that actually happened here.
+          set -euo pipefail
+          aws ecs describe-task-definition \
+            --task-definition "${{ vars.ECS_TASK_FAMILY }}" \
+            --query taskDefinition \
+            | jq 'del(
+                .taskDefinitionArn, .revision, .status, .requiresAttributes,
+                .compatibilities, .registeredAt, .registeredBy
+              )' > task-definition.json
+
+      - name: Point it at the new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ vars.ECS_CONTAINER_NAME }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.tag.outputs.value }}
+
+      # Waits for steady state. The service has a deployment circuit breaker
+      # with rollback, so a broken image rolls back on its own and this step
+      # fails loudly rather than reporting a green deploy of the old revision.
+      - name: Deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # The ALB only checks /health, which deliberately touches nothing. This
+      # asks the deployed app whether its dependencies are actually wired up.
+      - name: Check /ready
+        if: vars.SITE_URL != ''
+        run: |
+          set -euo pipefail
+          echo "deployed ${{ steps.tag.outputs.value }}"
+          curl --fail --silent --show-error --max-time 10 \
+            "${{ vars.SITE_URL }}/ready" | tee /dev/stderr | grep -q '"ok":true'

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN" translate="no">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#E5E3FF" />
+    <meta name="robots" content="noindex" />
+    <!-- The pixel heart, inline, so there is no favicon.ico for every phone in
+         the room to ask for and be told 404. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e8338a' d='M9 2H5v2H3v2H1v6h2v2h2v2h2v2h2v2h2v2h2v-2h2v-2h2v-2h2v-2h2v-2h2V6h-2V4h-2V2h-4v2h-2v2h-2V4H9V2z'/%3E%3C/svg%3E"
+    />
+    <!--
+      A Chinese page opened on an English phone gets offered to a translator,
+      and Safari's and Chrome's both work by replacing the text nodes in place.
+      React then owns nodes that are no longer in the document, so its updates
+      land nowhere: the text freezes on whatever the first render said while
+      attributes like `disabled` keep updating correctly.
+
+      On the operator console that is not cosmetic. The first render happens
+      before the first /state lands, so the console froze showing "…", "1 / ?"
+      and a primary button reading "已结束 · 按重置开始新一轮" — the show
+      declared over, on a phone, minutes before it started, with the buttons
+      underneath quietly enabling themselves against a state the operator could
+      not see. Opt every page out.
+    -->
+    <meta name="google" content="notranslate" />
+    <title>这样恋爱可不可以</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

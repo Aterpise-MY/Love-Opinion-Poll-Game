@@ -1,0 +1,231 @@
+# The checks. Everything deploy.yml does except the two things that change the
+# world — no push to ECR, no rollout to ECS.
+#
+# Two callers, one list. A pull request runs this file directly. deploy.yml
+# calls it as its first job and does not ask AWS for a credential until every
+# job here has passed — so "green on the pull request" and "allowed to ship"
+# are the same five checks, not two lists that can drift apart.
+#
+# It needs no credentials of any kind. No AWS role is assumed, and the image is
+# built with push disabled, which is why the ECR login deploy.yml does is
+# absent: authentication is a push-side requirement, not a build-side one.
+# That is deliberate, and worth keeping. A workflow with no secrets is a
+# workflow that a fork's pull request cannot exfiltrate anything from.
+#
+# Five jobs rather than one. Nothing here depends on anything else here — the
+# image build cannot be affected by whether the linter is happy — so running
+# them in series only made the image wait behind checks that could not inform
+# it, and collapsed four different kinds of failure into one red X named
+# "checks". Split, the pull request says which kind failed before you open it.
+
+name: ci
+
+on:
+  pull_request:
+  # deploy.yml is the caller. It passes nothing in — no inputs, and no
+  # `secrets:` on the calling job — which is what keeps this file as
+  # empty-handed on master as it is on a pull request.
+  workflow_call:
+
+# No paths-ignore, on purpose, unlike deploy.yml. A skipped workflow never
+# reports a status, so if this is ever made a required check, a docs-only pull
+# request would sit forever on "Expected — waiting for status to be reported"
+# rather than passing. Deploying costs money and a rollout; running these
+# checks costs about two minutes.
+
+# Read the repository, and nothing else. A called workflow can narrow what its
+# caller grants but never widen it, and deploy.yml gives the calling job this
+# same single line — so no job in this file can request an OIDC token, from
+# either entry point.
+permissions:
+  contents: read
+
+# Superseded pushes to the same pull request are worth cancelling — unlike a
+# rollout, an abandoned build leaves nothing half-finished.
+#
+# On a pull request, and only there. This used to be built from
+# github.workflow and github.ref, which was fine while a pull request was the
+# only way in. Called from deploy.yml, the `github` context is the CALLER's:
+# the name becomes "build and deploy", the ref becomes refs/heads/master, and
+# the result is one group shared by every deploy run with cancel-in-progress
+# set on it — a group in which a later push is entitled to cancel an earlier
+# run.
+#
+# So the name is spelled out rather than borrowed, and outside a pull request
+# the group is the run's own id: shared with nothing, so there is nothing for
+# it to cancel and nothing for it to wait behind. On a pull request it still
+# renders exactly as it always has, ci-refs/pull/N/merge. Which deploy goes
+# first, and that none is interrupted, is deploy.yml's `deploy-ecs` group and
+# only that — a string this one can never equal.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Every job runs on ubuntu-24.04-arm. Only `image` strictly needs it — see the
+# note there — but keeping one runner across the workflow means the npm caches
+# these jobs write are all built on the same architecture, and one fewer thing
+# differs between a check that passed and the build that ships.
+
+jobs:
+  # scripts/build-content.mjs imports node:crypto, node:fs and node:url and
+  # nothing else, so there is nothing to install. There is deliberately no
+  # `cache: npm` here either: it would send setup-node looking for a dependency
+  # file this job never uses, and fail the run before it started.
+  content:
+    name: answer key
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # frontend/src/content/questions.json and backend/answers.json are
+      # generated and committed. This fails when they have drifted from
+      # content/questions.source.json, which is the one way a pull request can
+      # look correct and still ship a wrong answer key.
+      - name: Verify the answer key matches the content
+        run: npm run content:check
+
+  backend:
+    name: backend tests
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          # Named explicitly, and it has to be. Left to itself setup-node keys
+          # the cache on the lockfile at the repository root, which describes
+          # the lint tooling and not one package this job installs — a key that
+          # would go stale and fresh at all the wrong moments.
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci --prefix backend
+      - run: npm test --prefix backend
+
+  # Build only. There is no frontend test suite yet — issue #26 owns writing
+  # one — and a build still catches the failure that matters most here, which
+  # is a broken Vite build. It surfaces in twenty legible lines rather than as
+  # a Docker layer dying four minutes into the image job. When #26 lands, this
+  # becomes a `frontend` job that builds and tests, and this one folds into it.
+  frontend-build:
+    name: frontend build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix frontend
+
+  lint:
+    name: lint and format
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          # The root lockfile is the right one here — this job installs ESLint
+          # and Prettier and nothing else. It is still named rather than left
+          # to the default, so that the three installing jobs read the same way
+          # and none of them depends on where setup-node happens to look.
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+
+  image:
+    name: image build
+    # ARM64 native, because ecs.tf pins runtime_platform.cpu_architecture to
+    # ARM64 and this build has to be the one that would be pushed. An x86
+    # runner with QEMU produces the same image, but this Dockerfile runs two
+    # `npm ci` passes and a Vite build — emulated that is minutes, native it is
+    # under one.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+
+    # Which layer cache this build writes, decided once. The reasoning is on
+    # the build step below; these two are only the switch.
+    #
+    #   pull request      PR_SCOPE ",scope=pr-N"   CACHE_MODE min
+    #   called on master  PR_SCOPE empty           CACHE_MODE max
+    #
+    # github.event.number exists on pull_request events alone. Used bare, as
+    # it was before this file had a second caller, it renders empty on a push
+    # and every deploy would have written to a scope literally named "pr-".
+    env:
+      PR_SCOPE: ${{ github.event_name == 'pull_request' && format(',scope=pr-{0}', github.event.number) || '' }}
+      CACHE_MODE: ${{ github.event_name == 'pull_request' && 'min' || 'max' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # push: false. This proves the Dockerfile still builds on ARM64 — the
+      # thing that actually breaks a deploy and that no unit test covers.
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          # Both off to match deploy.yml exactly. They change the manifest the
+          # build produces, and a PR build that differs from the deploy build
+          # in the manifest is a PR build that cannot catch a manifest problem.
+          # See the longer note in deploy.yml for why Fargate cares.
+          provenance: false
+          sbom: false
+          # Actions cache is branch-scoped, and the two directions are not
+          # symmetric. A pull request may read its base branch's caches, so the
+          # bare `type=gha` below reaches what deploy.yml wrote on master —
+          # that direction works and is worth keeping.
+          #
+          # The reverse does not. A cache written on refs/pull/N/merge is never
+          # readable from master, so the mode=max write this used to do could
+          # not "warm the layer cache that deploy.yml reads after the merge",
+          # whatever the comment here previously claimed. What it actually did
+          # was push every intermediate layer — two `npm ci` passes and a Vite
+          # build — into the repository's shared 10GB budget on every push to
+          # every pull request, evicting the master entries deploy.yml
+          # genuinely reuses. It was paying to make the deploy slower.
+          #
+          # So writes go to a scope belonging to this pull request alone, at
+          # mode=min. Re-pushing to the same pull request still hits them, via
+          # the first cache-from entry, and whatever they evict is an earlier
+          # push of the same branch rather than master's layers.
+          #
+          # Called from deploy.yml this job IS on master, and everything above
+          # turns over. PR_SCOPE is empty, so the scope drops out of all three
+          # entries below and they become deploy.yml's own, character for
+          # character: read `type=gha`, write `type=gha,mode=max`. That is the
+          # one place a full write earns its space: the deploy job builds the
+          # same commit minutes later in the same run, and finds every layer
+          # already there. The gate costs one build, not two — and nothing is
+          # evicted to pay for it, because these are the entries the deploy
+          # job was about to write anyway.
+          cache-from: |
+            type=gha${{ env.PR_SCOPE }}
+            type=gha
+          cache-to: type=gha,mode=${{ env.CACHE_MODE }}${{ env.PR_SCOPE }}

@@ -1,0 +1,41 @@
+node_modules/
+dist/
+.DS_Store
+
+# The admin key for docker compose. .env.example is the committed template.
+.env
+.env.*
+!.env.example
+
+# Browser-automation scratch output.
+.playwright-mcp/
+
+# Ephemeral specialist onboarding records. They carry absolute worktree paths,
+# which must never reach a public issue — so they never reach the repo either.
+.claude/onboarding/
+
+# Images uploaded while running locally — the real ones live in S3.
+frontend/public/uploads/
+
+# Terraform
+infra/.terraform/
+infra/build/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
+# .terraform.lock.hcl is intentionally committed — pin the providers.
+
+# Built frontend, copied in by the Dockerfile.
+backend/public/
+
+# Saved Terraform plans — they embed resolved values, including secrets.
+tfplan*
+*.tfplan
+
+# Claude Code's per-machine permission settings.
+.claude/settings.local.json
+
+# The Terraform as it stood before the move to EKS, copied aside when this
+# project was not yet in git. The first commit holds the same files.
+infra-ecs-backup/

@@ -1,0 +1,59 @@
+# cp terraform.tfvars.example terraform.tfvars, then edit.
+# terraform.tfvars is gitignored — it holds the admin key.
+
+# Pick one region and use it everywhere. Your AWS CLI default may differ from
+# this; a mismatch is a real source of confusion when debugging.
+aws_region = "ap-southeast-1"
+project    = "love-opinion-poll"
+
+# REQUIRED. An ALB's own DNS name cannot serve trusted HTTPS, and a browser
+# security warning after 300 people scan a QR code is the failure this whole
+# design exists to avoid. Short enough to read aloud from the stage — it is
+# also the fallback for anyone whose camera will not scan.
+domain_name = "poll.example.com"
+
+# Route53 zone in this account containing domain_name.
+hosted_zone_name = "example.com"
+
+# manage_dns = false if the domain's DNS lives elsewhere. The apply then blocks
+# on certificate validation while you add the records printed by
+# `terraform output acm_validation_records`. Do this days early either way.
+# manage_dns = false
+
+# Leave admin_key unset to have one generated:
+#   terraform output -raw admin_key
+# admin_key = "something-you-can-type-under-pressure"
+
+# Sizing. Defaults are 2 tasks x 1 vCPU / 2GB — well under $2 for a rehearsal
+# day plus the show, and the headroom is what lets the /state cache stay off.
+# desired_count = 2
+# task_cpu      = 1024
+# task_memory   = 2048
+
+# Only if an apply fails on ARM64 Fargate availability in a particular zone.
+# excluded_zone_ids = ["use1-az3"]
+
+# How long uploaded pictures, voice clips and video survive in S3. Raise it if
+# you author the content weeks before the show.
+# media_retention_days = 30
+
+# CI. Set this to owner/repo and Terraform creates the role that
+# .github/workflows/deploy.yml assumes over OIDC — no access keys anywhere.
+# Leave it empty and no CI role exists; deploys stay laptop-side.
+#   terraform output -json github_actions_setup
+# github_repository = "acme/poll-game"
+#
+# Must match `environment:` in the workflow — it is part of the OIDC subject
+# claim, so changing one without the other breaks authentication.
+# github_environment = "production"
+#
+# false if this account already trusts token.actions.githubusercontent.com for
+# another repo; a second provider fails with EntityAlreadyExists.
+# create_github_oidc_provider = true
+
+# Nothing to set for the image. The registry is an ECR repository this config
+# creates and names after `project`, and the task pulls from it with the
+# execution role — no registry credentials exist to put anywhere.
+#
+# image_tag has no default on purpose — scripts/deploy.sh passes it, so a bare
+# `terraform apply` fails rather than silently redeploying a stale image.

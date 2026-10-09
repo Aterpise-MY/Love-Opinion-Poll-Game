@@ -1,0 +1,19 @@
+{
+  "name": "love-opinion-poll-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "这样恋爱可不可以 opinion poll — server. Serves the built frontend and the API from one process.",
+  "scripts": {
+    "dev": "node server.js",
+    "dev:fast": "DECK_FILE=./deck.test.json node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1101.0",
+    "@aws-sdk/client-s3": "^3.1101.0"
+  }
+}

@@ -1,0 +1,17 @@
+Font files in this folder
+
+These were taken, unmodified, from the design language reference this app is
+styled after, which embeds them as Google Fonts web-font slices:
+
+  silkscreen-*.woff2      Silkscreen       numbers and UI chrome
+  noto-sans-sc-*.woff2    Noto Sans SC     titles (variable, used at 900)
+  zcool-kuaile-*.woff2    ZCOOL KuaiLe     the series ribbon
+
+Google Fonts publishes all three families under the SIL Open Font License 1.1
+(https://openfontlicense.org), which allows them to be bundled with software.
+If this app is ever distributed beyond the event it was built for, add each
+family's own OFL.txt and copyright line from its Google Fonts page here; they
+were not part of the reference file and are not reproduced from memory.
+
+The pixel icons drawn inline in src/lib/icons.jsx are the four the reference
+uses from pixelarticons (https://github.com/halfmage/pixelarticons).
