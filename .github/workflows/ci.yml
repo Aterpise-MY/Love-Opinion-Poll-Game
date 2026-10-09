@@ -1,10 +1,10 @@
 # The checks. Everything deploy.yml does except the two things that change the
-# world — no push to ECR, no rollout to ECS.
+# world — no push to ECR, no rollout to EKS.
 #
 # Two callers, one list. A pull request runs this file directly. deploy.yml
 # calls it as its first job and does not ask AWS for a credential until every
 # job here has passed — so "green on the pull request" and "allowed to ship"
-# are the same five checks, not two lists that can drift apart.
+# are the same six checks, not two lists that can drift apart.
 #
 # It needs no credentials of any kind. No AWS role is assumed, and the image is
 # built with push disabled, which is why the ECR login deploy.yml does is
@@ -12,7 +12,7 @@
 # That is deliberate, and worth keeping. A workflow with no secrets is a
 # workflow that a fork's pull request cannot exfiltrate anything from.
 #
-# Five jobs rather than one. Nothing here depends on anything else here — the
+# Six jobs rather than one. Nothing here depends on anything else here — the
 # image build cannot be affected by whether the linter is happy — so running
 # them in series only made the image wait behind checks that could not inform
 # it, and collapsed four different kinds of failure into one red X named
@@ -55,16 +55,16 @@ permissions:
 # the group is the run's own id: shared with nothing, so there is nothing for
 # it to cancel and nothing for it to wait behind. On a pull request it still
 # renders exactly as it always has, ci-refs/pull/N/merge. Which deploy goes
-# first, and that none is interrupted, is deploy.yml's `deploy-ecs` group and
+# first, and that none is interrupted, is deploy.yml's `deploy-eks` group and
 # only that — a string this one can never equal.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Every job runs on ubuntu-24.04-arm. Only `image` strictly needs it — see the
-# note there — but keeping one runner across the workflow means the npm caches
-# these jobs write are all built on the same architecture, and one fewer thing
-# differs between a check that passed and the build that ships.
+# Every job runs on ubuntu-24.04, which is x86. Only `image` strictly needs
+# that — see the note there — but keeping one runner across the workflow means
+# the npm caches these jobs write are all built on the same architecture, and
+# one fewer thing differs between a check that passed and the build that ships.
 
 jobs:
   # scripts/build-content.mjs imports node:crypto, node:fs and node:url and
@@ -73,7 +73,7 @@ jobs:
   # file this job never uses, and fail the run before it started.
   content:
     name: answer key
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
 
     steps:
@@ -92,7 +92,7 @@ jobs:
 
   backend:
     name: backend tests
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -118,7 +118,7 @@ jobs:
   # becomes a `frontend` job that builds and tests, and this one folds into it.
   frontend-build:
     name: frontend build
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -135,7 +135,7 @@ jobs:
 
   lint:
     name: lint and format
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -155,14 +155,51 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
 
+  # Nothing here deploys infrastructure — that stays a laptop-side decision —
+  # but infra/ is most of what stands between a commit and a working show, and
+  # before this job nothing looked at it at all: deploy.yml ignores infra/**,
+  # so a mistake there reached master unchecked.
+  #
+  # No credentials, like every other job in this file. -backend=false is what
+  # makes that possible: init fetches the providers and never opens the state
+  # bucket, and validate checks the configuration against their schemas
+  # without asking AWS anything. It does not prove an apply would succeed; it
+  # proves the configuration is one Terraform can read.
+  terraform:
+    name: terraform
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          # versions.tf requires 1.10 or newer. Held to one minor rather than
+          # left at "latest", so that a new Terraform release cannot turn this
+          # red on a commit that changed nothing.
+          terraform_version: "~1.15"
+          # The wrapper exists to hand a plan's output to later steps. Nothing
+          # here reads it.
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform -chdir=infra fmt -check -diff
+
+      - name: Initialise without a backend
+        run: terraform -chdir=infra init -backend=false -input=false
+
+      - name: Validate
+        run: terraform -chdir=infra validate
+
   image:
     name: image build
-    # ARM64 native, because ecs.tf pins runtime_platform.cpu_architecture to
-    # ARM64 and this build has to be the one that would be pushed. An x86
+    # x86 native, because the image runs on Fargate under EKS, which has no
+    # Arm option, and this build has to be the one that would be pushed. An Arm
     # runner with QEMU produces the same image, but this Dockerfile runs two
     # `npm ci` passes and a Vite build — emulated that is minutes, native it is
     # under one.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     # Which layer cache this build writes, decided once. The reasoning is on
@@ -183,18 +220,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # push: false. This proves the Dockerfile still builds on ARM64 — the
-      # thing that actually breaks a deploy and that no unit test covers.
+      # push: false. This proves the Dockerfile still builds for linux/amd64 —
+      # the thing that actually breaks a deploy and that no unit test covers.
       - name: Build the image
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: false
           # Both off to match deploy.yml exactly. They change the manifest the
           # build produces, and a PR build that differs from the deploy build
           # in the manifest is a PR build that cannot catch a manifest problem.
-          # See the longer note in deploy.yml for why Fargate cares.
+          # See the note on the same two lines in deploy.yml.
           provenance: false
           sbom: false
           # Actions cache is branch-scoped, and the two directions are not

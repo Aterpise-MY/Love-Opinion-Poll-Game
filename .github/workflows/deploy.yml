@@ -1,21 +1,26 @@
-# Run the checks, and only if every one of them passes: build the ARM64 image,
-# push it to ECR, and roll the ECS service onto it.
+# Run the checks, and only if every one of them passes: build the image, push
+# it to ECR, and roll the Deployment on EKS onto it.
 #
 # Two jobs, and the order is the whole design. `ci` is ci.yml, called as it
-# stands — the same five checks a pull request gets, run on the commit that is
+# stands — the same six checks a pull request gets, run on the commit that is
 # about to ship. `deploy` needs it, so one red check ends the run before
 # anything here has asked AWS for a credential. A merge is not evidence that
 # the checks passed: master can be pushed to without a pull request, and two
 # green pull requests can still combine into a tree neither of them tested.
 #
-# Terraform is deliberately not involved. This workflow registers a new task
-# definition revision from the one already running and points the service at
-# it — so it can deploy code without holding the state file, and infrastructure
-# changes stay a human, laptop-side decision via scripts/deploy.sh.
+# Terraform is deliberately not involved. This workflow changes one field on
+# the Deployment that is already there — the container image — so it can
+# deploy code without holding the state file, and infrastructure changes stay
+# a human, laptop-side decision.
 #
-# READ THIS BEFORE A SHOW: every push to master deploys. A rolling deployment
-# runs two image versions at once for 30-90 seconds, and a phone that loaded
-# index.html from the old task will 404 on its asset from the new one. Freeze
+# It also does nothing at all until the repository has been pointed at a
+# cluster. The deploy job is skipped while the EKS_CLUSTER variable is unset,
+# so a repository whose stack does not exist yet runs the checks, goes green,
+# and does not fail every push on a role it has no way to assume.
+#
+# READ THIS BEFORE A SHOW: every push to master deploys. A rolling update runs
+# two image versions side by side until it finishes, and a phone that loaded
+# index.html from an old pod will 404 on its asset from a new one. Freeze
 # deploys two hours out — disable this workflow, or protect the `production`
 # environment with a required reviewer.
 
@@ -49,7 +54,7 @@ on:
 # and a job waiting on a group its own run is holding is a deadlock that
 # GitHub resolves by cancelling the run.
 concurrency:
-  group: deploy-ecs
+  group: deploy-eks
   cancel-in-progress: false
 
 # The floor for every job, and all that the checks get. The one permission
@@ -59,7 +64,7 @@ permissions:
 
 jobs:
   # ci.yml, exactly as a pull request runs it: content, backend tests, frontend
-  # build, lint and format, image build. Nothing is passed in. With no
+  # build, lint and format, terraform, image build. Nothing is passed in. With no
   # `secrets:` here the called jobs see no repository secret, and with
   # contents: read as the whole grant none of them can request an OIDC token —
   # a called workflow cannot hold a permission its calling job does not.
@@ -72,8 +77,8 @@ jobs:
       contents: read
 
   deploy:
-    name: build → ECR → ECS
-    # All five, or nothing. One failed or cancelled check and `ci` has not
+    name: build → ECR → EKS
+    # All six, or nothing. One failed or cancelled check and `ci` has not
     # succeeded, and a job whose need did not succeed is skipped — it is never
     # queued, never asks for the environment, and never reaches the step that
     # requests a token.
@@ -87,12 +92,17 @@ jobs:
     # branch carries its own copy of this file and can delete the line. What
     # actually stops a branch deploying is a deployment-branch rule on the
     # `production` environment, which lives in the repository settings.
-    if: success() && github.ref == 'refs/heads/master'
-    # ARM64 native, because ecs.tf pins runtime_platform.cpu_architecture to
-    # ARM64. An x86 runner with QEMU produces the same image, but this
+    #
+    # The third test is the switch described at the top of this file: no
+    # cluster named, nothing to deploy to. EKS_CLUSTER arrives with the other
+    # repository variables from `terraform output github_actions_setup`, so
+    # setting them is what turns deploys on.
+    if: success() && github.ref == 'refs/heads/master' && vars.EKS_CLUSTER != ''
+    # x86, because the image runs on Fargate under EKS, which has no Arm
+    # option. An Arm runner with QEMU produces the same image, but this
     # Dockerfile runs two `npm ci` passes and a Vite build — emulated that is
     # minutes, native it is under one.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: production
 
@@ -139,13 +149,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.tag.outputs.value }}
-          # Both off, and not optional. This action defaults provenance on,
-          # which wraps the image in an OCI index that Fargate cannot pull —
-          # it surfaces as "image Manifest does not contain descriptor
-          # matching platform" long after the build looked successful.
+          # Both off. This action defaults provenance on, which wraps the
+          # image in an OCI index beside an attestation manifest. Nothing in
+          # this stack reads attestations, and one plain manifest for one
+          # platform is the shape that never surprises whatever pulls it.
           provenance: false
           sbom: false
           # The `image` check wrote this same cache, from this same commit,
@@ -156,49 +166,55 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Start from what is actually running, not from a file in the repo, so
-      # this cannot silently revert a setting someone changed in Terraform.
-      # describe-task-definition returns fields register-task-definition
-      # rejects, hence the jq.
-      - name: Read the running task definition
+      # Fetches the cluster's endpoint and certificate, and writes a kubeconfig
+      # that asks the AWS CLI for a token on each call. This is the one thing
+      # IAM lets the role do to the cluster (eks:DescribeCluster). What it may
+      # do once inside is a Kubernetes Role in infra/github-oidc.tf: read and
+      # patch Deployments in one namespace, read pods, and no Secrets.
+      - name: Point kubectl at the cluster
         run: |
-          # pipefail is load-bearing. The step's exit status is jq's, and jq
-          # given empty stdin exits 0 having written nothing — so a failed aws
-          # call leaves an EMPTY task-definition.json and this step still goes
-          # green. The error then surfaces in the NEXT step as
-          #
-          #   task-definition.json: Unexpected end of JSON input
-          #
-          # which points at a file the render action never had a chance to
-          # read, and says nothing about the AccessDenied or ClientException
-          # that actually happened here.
-          set -euo pipefail
-          aws ecs describe-task-definition \
-            --task-definition "${{ vars.ECS_TASK_FAMILY }}" \
-            --query taskDefinition \
-            | jq 'del(
-                .taskDefinitionArn, .revision, .status, .requiresAttributes,
-                .compatibilities, .registeredAt, .registeredBy
-              )' > task-definition.json
+          aws eks update-kubeconfig \
+            --name "${{ vars.EKS_CLUSTER }}" \
+            --region "${{ vars.AWS_REGION }}"
 
-      - name: Point it at the new image
-        id: render
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          container-name: ${{ vars.ECS_CONTAINER_NAME }}
-          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.tag.outputs.value }}
+      # One field changes: the container's image. Everything else about the
+      # Deployment stays as Terraform last wrote it, so this cannot silently
+      # revert a setting someone changed there.
+      - name: Set the new image
+        run: |
+          kubectl --namespace "${{ vars.K8S_NAMESPACE }}" set image \
+            "deployment/${{ vars.K8S_DEPLOYMENT }}" \
+            "${{ vars.K8S_CONTAINER }}=${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.tag.outputs.value }}"
 
-      # Waits for steady state. The service has a deployment circuit breaker
-      # with rollback, so a broken image rolls back on its own and this step
-      # fails loudly rather than reporting a green deploy of the old revision.
-      - name: Deploy
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-        with:
-          task-definition: ${{ steps.render.outputs.task-definition }}
-          service: ${{ vars.ECS_SERVICE }}
-          cluster: ${{ vars.ECS_CLUSTER }}
-          wait-for-service-stability: true
+      # This is the step that makes a green run mean something. It blocks
+      # until the new pods are serving — the namespace has readiness gates, so
+      # that is "healthy at the load balancer", not merely "started" — and it
+      # exits non-zero when the timeout passes first. A Fargate pod takes a
+      # minute or two to appear before its container even starts, hence ten.
+      #
+      # A step of its own, apart from the one above, so that the undo below
+      # can tell "the rollout stalled" from "the image was never set".
+      - name: Wait for the rollout
+        id: rollout
+        run: |
+          kubectl --namespace "${{ vars.K8S_NAMESPACE }}" rollout status \
+            "deployment/${{ vars.K8S_DEPLOYMENT }}" --timeout=10m
+
+      # Kubernetes does not roll back by itself. A bad image stalls with the
+      # old pods still serving — the Deployment retires nothing until its
+      # replacements are ready — and stays stalled until somebody acts. This
+      # is that somebody. The job still ends red: the wait failed, and this
+      # only puts the Deployment back.
+      #
+      # Tied to the wait's own failure, not to failure() alone. Without the
+      # second test a failure anywhere earlier would arrive here too, and
+      # `rollout undo` on a Deployment that was never changed does not do
+      # nothing: it steps back to the revision before the one that is running.
+      - name: Undo a stalled rollout
+        if: failure() && steps.rollout.conclusion == 'failure'
+        run: |
+          kubectl --namespace "${{ vars.K8S_NAMESPACE }}" rollout undo \
+            "deployment/${{ vars.K8S_DEPLOYMENT }}"
 
       # The ALB only checks /health, which deliberately touches nothing. This
       # asks the deployed app whether its dependencies are actually wired up.
