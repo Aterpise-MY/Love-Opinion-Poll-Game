@@ -10,6 +10,14 @@ const VOTER_KEY = "lovepoll:voterId";
 const EPOCH_KEY = "lovepoll:epoch";
 const CHOICES_KEY = "lovepoll:choices";
 const JOINED_KEY = "lovepoll:joined";
+// What the person typed on the way in. It belongs to the person and not to a
+// run of the game, so it is kept the way the voter id is: a RESET leaves it
+// alone and only the device wipe drops it.
+//
+// No request carries it in a body or a URL. As a cookie it does travel with
+// every request to this host, like the keys above — the server reads none of
+// them.
+const NAME_KEY = "lovepoll:name";
 
 function randomId() {
   // crypto.randomUUID needs a secure context. Rehearsing over the venue wifi
@@ -107,6 +115,17 @@ export const hasJoined = () => read(JOINED_KEY, false);
 export const markJoined = () => write(JOINED_KEY, true);
 
 /**
+ * The remembered name, or null. Whatever text is stored comes back as it is:
+ * whether it is still a usable name is name.js's question, asked by the page.
+ */
+export function getName() {
+  const name = read(NAME_KEY, null);
+  return typeof name === "string" ? name : null;
+}
+
+export const saveName = (name) => write(NAME_KEY, name);
+
+/**
  * Forget everything about the current run, keeping the device identity.
  *
  * Wiping the server is only half of a RESET: without this a phone keeps the
@@ -138,7 +157,7 @@ export function syncEpoch(epoch) {
 
 /** Wipe this device's identity. Used by /?reset=1 to clear rehearsal phones. */
 export function clearAll() {
-  for (const key of [VOTER_KEY, CHOICES_KEY, JOINED_KEY, EPOCH_KEY]) {
+  for (const key of [VOTER_KEY, NAME_KEY, CHOICES_KEY, JOINED_KEY, EPOCH_KEY]) {
     try {
       localStorage.removeItem(key);
     } catch {

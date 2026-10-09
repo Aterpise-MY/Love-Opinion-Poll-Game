@@ -4,18 +4,26 @@ import { ApiError, postJoin, postVote } from "../lib/api.js";
 import { findOption, optionsOf, sharesOf, someOptionHas, totalVotes } from "../lib/choices.js";
 import { useQuestions } from "../lib/content.js";
 import { useCountdown, useGameState } from "../lib/hooks.js";
+import { canEditName, checkName } from "../lib/name.js";
 import { ChatNote, PixelIcon, Shares } from "../lib/ui.jsx";
 import {
   clearAll,
   getChoices,
+  getName,
   getVoterId,
   hasJoined,
   markJoined,
+  saveName,
   setChoice,
   syncEpoch,
 } from "../lib/storage.js";
+import NameEntry, { NAME_TEXT } from "./NameEntry.jsx";
 
 const POLL_MS = 2000;
+// A join that fails is tried once more, this long afterwards: time enough for
+// a dropped connection to have come back, and still before anybody has looked
+// up at the count on the wall.
+const JOIN_RETRY_MS = 2000;
 
 // Rehearsal phones keep a voterId and a set of choices that would make them
 // look "already voted" during the real thing. /?reset=1 wipes this device —
@@ -25,6 +33,14 @@ if (new URLSearchParams(window.location.search).has("reset")) {
   window.location.replace("/");
 }
 
+// Whatever is stored goes through the same check as what is typed, so a value
+// that is no longer a usable name asks again instead of greeting somebody with
+// it.
+function rememberedName() {
+  const checked = checkName(getName());
+  return checked.ok ? checked.name : null;
+}
+
 export default function Phone() {
   const voterId = useMemo(getVoterId, []);
   const { state, offline, stale, offset } = useGameState(POLL_MS);
@@ -32,37 +48,89 @@ export default function Phone() {
   const [choices, setChoices] = useState(getChoices);
   const [pending, setPending] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [name, setName] = useState(rememberedName);
+  const [renaming, setRenaming] = useState(false);
 
+  // A phone is not in the room until it has a name: no lobby, no question, no
+  // vote, and no join either — the count on the wall is of people who got in.
+  // Both joins below wait on this, and neither is sent again when the name is
+  // only changed.
+  const named = name !== null;
+
+  // On load for a phone that is remembered, and at the moment a name is
+  // entered for one that is not.
   useEffect(() => {
-    if (hasJoined()) return;
+    if (!named || hasJoined()) return undefined;
+
+    let cancelled = false;
+    let retry;
     postJoin(voterId)
       .then(markJoined)
       .catch(() => {
-        // A failed join only costs a number on the lobby screen; voting is
-        // unaffected, so there is nothing worth showing the audience.
+        if (cancelled) return;
+        // Once more and then no further. A failed join only costs a number on
+        // the lobby screen; voting is unaffected, so there is nothing worth
+        // showing the audience and nothing worth a queue of retries either.
+        retry = setTimeout(() => {
+          if (hasJoined()) return;
+          postJoin(voterId)
+            .then(markJoined)
+            .catch(() => {});
+        }, JOIN_RETRY_MS);
       });
-  }, [voterId]);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(retry);
+    };
+  }, [voterId, named]);
 
   // A RESET starts a new run. Everything this phone remembers belongs to the
   // previous one, and keeping it would show "already voted" on questions
-  // nobody has answered yet.
+  // nobody has answered yet. The name is the exception — it is the person's,
+  // not the run's — so a phone that has one joins the new run under it.
   useEffect(() => {
     if (!state?.epoch) return;
     if (!syncEpoch(state.epoch)) return;
     setChoices({});
+    // Still at the form: the effect above joins once there is a name.
+    if (!named) return;
     postJoin(voterId)
       .then(markJoined)
       .catch(() => {
         // Same as the first join: a missed count is not worth a message.
       });
-  }, [state?.epoch, voterId]);
+  }, [state?.epoch, voterId, named]);
+
+  // The name can be changed until the first question opens, and what says so
+  // is the state as last polled — the phone follows the room by a poll.
+  const canRename = canEditName(state);
+
+  // Leaving the first lobby drops an edit that was still open, and keeps it
+  // dropped: when the operator undoes back into that lobby the phone shows the
+  // button again, not a form nobody asked for a second time.
+  useEffect(() => {
+    if (!canRename) setRenaming(false);
+  }, [canRename]);
+
+  function keepName(next) {
+    saveName(next);
+    setName(next);
+    setRenaming(false);
+  }
 
   const qIndex = state?.qIndex ?? 0;
   const question = questions[qIndex];
   const options = optionsOf(question);
   const myChoice = choices[qIndex];
 
-  const remaining = useCountdown(state?.phase === "VOTING" ? state.phaseEndsAt : null, offset);
+  // No clock runs behind the form. It would redraw this page twenty times a
+  // second under a field somebody is typing in, for a countdown they cannot
+  // see.
+  const remaining = useCountdown(
+    named && state?.phase === "VOTING" ? state.phaseEndsAt : null,
+    offset,
+  );
   const expired = remaining === 0;
 
   useEffect(() => setNotice(null), [qIndex, state?.phase]);
@@ -109,9 +177,13 @@ export default function Phone() {
   // down at it for something to happen. (`state.offline` is the mode; the
   // `offline` from the hook above is this phone's own connection.)
   //
-  // Nothing else stops: the poll keeps running and the join above has already
-  // been sent, so the moment the host switches the mode off this phone is back
-  // in the normal flow without being touched.
+  // Nothing else stops: the poll keeps running, and a phone that has a name
+  // has already sent its join, so the moment the host switches the mode off it
+  // is back in the normal flow without being touched.
+  //
+  // A phone without a name is not asked for one here. The form is something
+  // to do, on the one screen whose whole point is that there is nothing to do;
+  // it comes up when the mode is switched off, which only happens in a lobby.
   if (state.offline) {
     return (
       <main className="phone">
@@ -119,6 +191,31 @@ export default function Phone() {
           {offline && <span className="pill pill--warn">网络断了</span>}
         </header>
         <ChatNote title="本场不用手机投票">请看大屏幕，听主持人的指示</ChatNote>
+      </main>
+    );
+  }
+
+  // The gate. Below this line the phone is in the room; above it nothing of
+  // the room is drawn — no ticks, no lobby, no question, not the reveal that
+  // would otherwise cover the whole screen. Somebody who scans late gets the
+  // form first as well, whatever the wall is showing.
+  //
+  // The same form comes back from the first lobby for a change of name. It
+  // needs both halves of the condition: `renaming` alone would hold the form
+  // up for the one render between the game moving on and the effect above
+  // noticing.
+  if (!named || (renaming && canRename)) {
+    return (
+      <main className="phone">
+        <header className="phone__bar">
+          {offline && <span className="pill pill--warn">网络断了</span>}
+        </header>
+        <NameEntry
+          current={name}
+          canChangeLater={canRename}
+          onSubmit={keepName}
+          onCancel={() => setRenaming(false)}
+        />
       </main>
     );
   }
@@ -143,11 +240,32 @@ export default function Phone() {
       </header>
 
       {state.phase === "LOBBY" && (
-        // A conversation, the way the poster draws one: the room says it is
-        // ready, and the other side is still typing.
-        <ChatNote title="准备好了" typing>
-          看大屏幕，马上开始
-        </ChatNote>
+        <>
+          {/* A conversation, the way the poster draws one: the room says it is
+              ready, by name, and the other side is still typing. The name is
+              in a span of its own so that twenty letters with no space among
+              them wrap inside the bubble instead of running out of it. */}
+          <ChatNote
+            title={
+              <>
+                {NAME_TEXT.greeting.before}
+                <span className="phone__name-shown">{name}</span>
+                {NAME_TEXT.greeting.after}
+              </>
+            }
+            typing
+          >
+            看大屏幕，马上开始
+          </ChatNote>
+          {/* Offered in the first lobby only. Every later lobby greets by the
+              same name and has no button, which is all "fixed" needs to look
+              like. */}
+          {canRename && (
+            <button type="button" className="phone__rename" onClick={() => setRenaming(true)}>
+              {NAME_TEXT.rename.open}
+            </button>
+          )}
+        </>
       )}
 
       {/* Voting, locked and reveal all keep the content mounted — the reveal
