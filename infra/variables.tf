@@ -66,9 +66,30 @@ variable "image_tag" {
     immutable, and the lifecycle policy in ecr.tf keeps only the newest few
     images. CI pushes one on every deploy without telling Terraform, so the
     tag recorded in state can be both older than what is running and already
-    expired. Applying it rolls the service back, or fails the pull.
+    expired. Applying it rolls the Deployment back, or fails the pull.
+
+    The image has to be built for linux/amd64. Fargate on EKS has no Arm
+    option, and an arm64 image pulls cleanly and then dies at once with
+    "exec format error".
   DESC
   type        = string
+}
+
+# ---------------------------------------------------------------------------
+# Cluster
+# ---------------------------------------------------------------------------
+
+variable "kubernetes_version" {
+  description = <<-DESC
+    EKS control plane version. Fargate pods take the version of the control
+    plane at the moment they start, so an upgrade here reaches the app only
+    when its pods are next replaced.
+
+    Stay on a version in standard support: once one passes into extended
+    support the control plane is billed at several times the rate.
+  DESC
+  type        = string
+  default     = "1.36"
 }
 
 # ---------------------------------------------------------------------------
@@ -76,21 +97,29 @@ variable "image_tag" {
 # ---------------------------------------------------------------------------
 
 variable "desired_count" {
-  description = "Running tasks. Two so a single task dying mid-show is survivable."
+  description = "Running pods. Two so a single pod dying mid-show is survivable."
   type        = number
   default     = 2
 }
 
-variable "task_cpu" {
-  description = "Fargate CPU units. 1024 = 1 vCPU."
-  type        = number
-  default     = 1024
+variable "pod_cpu" {
+  description = "CPU each pod requests, as a Kubernetes quantity. \"1\" = 1 vCPU."
+  type        = string
+  default     = "1"
 }
 
-variable "task_memory" {
-  description = "Fargate memory in MiB."
-  type        = number
-  default     = 2048
+variable "pod_memory" {
+  description = <<-DESC
+    Memory each pod requests, as a Kubernetes quantity.
+
+    Not a round number, and it should not be made one. Fargate adds 256Mi to
+    the request for its own components and then rounds up to the next size it
+    sells, so 1792Mi is what lands on exactly 1 vCPU / 2 GB. Ask for 2Gi and
+    you are billed for 3 GB to use 2. Check what you actually got with:
+      kubectl describe pod -n <namespace> <pod> | grep CapacityProvisioned
+  DESC
+  type        = string
+  default     = "1792Mi"
 }
 
 variable "container_port" {
@@ -99,8 +128,82 @@ variable "container_port" {
   default     = 8080
 }
 
+# ---------------------------------------------------------------------------
+# Microservices — see services.tf
+# ---------------------------------------------------------------------------
+
+variable "realtime_enabled" {
+  description = <<-DESC
+    false turns off every real-time microservice at once — player,
+    voting-core, state-sync, risk — and the Redis they share, whatever
+    service_image_tags says. The app keeps running, and with it the operator
+    screen, the setup page and the projector views.
+
+    This is the infrastructure half of 离线模式, for a show the host runs
+    entirely from the operator screen: nothing real-time is left to pay for or
+    to go wrong. It does not flip the game's own offline switch. That one is
+    on the setup page, lives in the game state, and is what stops phones
+    voting through the app and takes the QR code and the results off the
+    projector — turn it on there as well.
+
+    Leave this true to keep the services running and let that setup-page
+    switch silence them instead: each one reads the flag from the app and
+    stops its real-time work while it is on.
+  DESC
+  type        = bool
+  default     = true
+}
+
+variable "service_image_tags" {
+  description = <<-DESC
+    ECR tag to run for each microservice, keyed by service name:
+
+      service_image_tags = {
+        "player"      = "20261008-101500-abc1234"
+        "voting-core" = "20261008-101500-abc1234"
+        "state-sync"  = "20261008-101500-abc1234"
+        "risk"        = "20261008-101500-abc1234"
+      }
+
+    A service with no entry is not deployed at all, and with the map empty
+    there is no Redis either. Their ECR repositories exist regardless, so an
+    image can be pushed before its service is switched on. Like image_tag,
+    the tag must be a linux/amd64 image that is actually in the repository.
+
+    player and voting-core each ask risk before they accept anything, so
+    neither can be switched on without it.
+  DESC
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition = alltrue([
+      for name in keys(var.service_image_tags) : contains(["player", "voting-core", "state-sync", "risk"], name)
+    ])
+    error_message = "service_image_tags keys must be player, voting-core, state-sync or risk."
+  }
+
+  validation {
+    condition = (
+      !(contains(keys(var.service_image_tags), "player") || contains(keys(var.service_image_tags), "voting-core"))
+      || contains(keys(var.service_image_tags), "risk")
+    )
+    error_message = "player and voting-core call risk on every request: give risk a tag as well."
+  }
+}
+
+variable "redis_node_type" {
+  description = <<-DESC
+    ElastiCache node size. Two of these run, in two zones, whenever at least
+    one microservice is enabled. The smallest is ample for a room of a few
+    hundred phones: the whole dataset is a few sets and counters per question.
+  DESC
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
 variable "excluded_zone_ids" {
-  description = "Availability zone IDs to avoid, e.g. [\"use1-az3\"] where ARM64 Fargate is unavailable."
+  description = "Availability zone IDs to avoid, e.g. [\"use1-az3\"] where Fargate for EKS is unavailable."
   type        = list(string)
   default     = []
 }

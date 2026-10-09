@@ -1,0 +1,12 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: {{ required "name is required" .Values.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceRef:
+    name: {{ required "serviceName is required" .Values.serviceName }}
+    port: {{ .Values.servicePort }}
+  targetGroupARN: {{ required "targetGroupARN is required" .Values.targetGroupARN }}
+  # Pod IPs, not node ports: a Fargate pod has no node to open a port on.
+  targetType: ip

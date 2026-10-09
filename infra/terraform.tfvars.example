@@ -24,13 +24,41 @@ hosted_zone_name = "example.com"
 #   terraform output -raw admin_key
 # admin_key = "something-you-can-type-under-pressure"
 
-# Sizing. Defaults are 2 tasks x 1 vCPU / 2GB — well under $2 for a rehearsal
-# day plus the show, and the headroom is what lets the /state cache stay off.
+# Sizing. Defaults are 2 pods x 1 vCPU / 2GB, and the headroom is what lets the
+# /state cache stay off. pod_memory is 1792Mi on purpose: Fargate adds 256Mi
+# of its own and rounds up, so that is what lands on 2GB — see variables.tf.
+#
+# The pods are no longer most of the bill. The EKS control plane and the NAT
+# gateway are each charged by the hour for as long as the stack stands, so
+# tear it down after the show rather than leaving it idle.
 # desired_count = 2
-# task_cpu      = 1024
-# task_memory   = 2048
+# pod_cpu       = "1"
+# pod_memory    = "1792Mi"
 
-# Only if an apply fails on ARM64 Fargate availability in a particular zone.
+# EKS control plane version. Keep it on one that is in standard support.
+# kubernetes_version = "1.36"
+
+# Microservices (services.tf). Leave this out and none of them is deployed and
+# no Redis is created — only their empty ECR repositories. Give a service a tag
+# once its linux/amd64 image is in its repository; player and voting-core
+# both need risk.
+#   terraform output service_ecr_repository_urls
+# service_image_tags = {
+#   "player"      = "20261008-101500-abc1234"
+#   "voting-core" = "20261008-101500-abc1234"
+#   "state-sync"  = "20261008-101500-abc1234"
+#   "risk"        = "20261008-101500-abc1234"
+# }
+#
+# 离线模式, the infrastructure half: false turns all four off and removes
+# Redis, whatever tags are set above, leaving the app and its operator screen.
+# The game's own offline switch is still the one on the setup page.
+# realtime_enabled = true
+#
+# Two Redis nodes of this size run whenever any microservice is enabled.
+# redis_node_type = "cache.t4g.micro"
+
+# Only if an apply fails on Fargate availability in a particular zone.
 # excluded_zone_ids = ["use1-az3"]
 
 # How long uploaded pictures, voice clips and video survive in S3. Raise it if
@@ -52,8 +80,9 @@ hosted_zone_name = "example.com"
 # create_github_oidc_provider = true
 
 # Nothing to set for the image. The registry is an ECR repository this config
-# creates and names after `project`, and the task pulls from it with the
-# execution role — no registry credentials exist to put anywhere.
+# creates and names after `project`, and Fargate pulls from it with the pod
+# execution role — no registry credentials exist to put anywhere. Build it for
+# linux/amd64: Fargate on EKS does not run Arm images.
 #
 # image_tag has no default on purpose — scripts/deploy.sh passes it, so a bare
 # `terraform apply` fails rather than silently redeploying a stale image.

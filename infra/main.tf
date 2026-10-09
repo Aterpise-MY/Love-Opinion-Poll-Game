@@ -21,24 +21,8 @@ resource "random_password" "admin_key" {
   special = false
 }
 
-# The key reaches the container through the execution role at task start, not
-# as a plaintext `environment` entry in the task definition. That distinction
-# is the whole point: anything holding ecs:DescribeTaskDefinition can read an
-# environment variable, and the CI deploy role holds it on "*" because
-# RegisterTaskDefinition cannot be scoped. A `secrets` entry stores only this
-# ARN in the revision.
-#
-# No key_id, so this uses the aws/ssm managed key. Switching to a customer
-# managed key means also granting kms:Decrypt on it to the execution role —
-# with the default key ssm:GetParameters alone is enough.
-resource "aws_ssm_parameter" "admin_key" {
-  name        = "/${local.name}/admin-key"
-  description = "Operator console key, injected into the task as ADMIN_KEY."
-  type        = "SecureString"
-  value       = local.admin_key
-
-  tags = local.tags
-}
+# The key reaches the container as a Kubernetes Secret — see k8s.tf, which is
+# also where the reason it is not a plain env entry is written down.
 
 # ---------------------------------------------------------------------------
 # State
@@ -72,7 +56,7 @@ resource "aws_dynamodb_table" "poll" {
 # Question media — pictures, voice clips and video
 #
 # Uploaded from the setup page, read by every phone and the projector. Public
-# read on GET only; writes go through the task role, which is the only
+# read on GET only; writes go through the app's IAM role, which is the only
 # principal with PutObject. Served over the S3 REST endpoint, which is HTTPS.
 #
 # One bucket for all three kinds, not three buckets. They share an access

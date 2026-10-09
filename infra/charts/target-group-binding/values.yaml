@@ -1,0 +1,11 @@
+# Every value is set by infra/k8s.tf. Nothing here has a useful default.
+
+# Name of the TargetGroupBinding object.
+name: ""
+
+# The Service whose pods are registered, and the Service port they sit behind.
+serviceName: ""
+servicePort: 80
+
+# ARN of the target group in infra/alb.tf.
+targetGroupARN: ""

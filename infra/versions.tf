@@ -35,6 +35,17 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    # The cluster's own API. Everything in k8s.tf goes through the first, and
+    # the two Helm releases — the load balancer controller and the target
+    # group binding — through the second.
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 3.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -46,5 +57,51 @@ provider "aws" {
       Project   = var.project
       ManagedBy = "terraform"
     }
+  }
+}
+
+# Both of these talk to a cluster that this same configuration creates, which
+# shapes two choices.
+#
+# The token comes from `aws eks get-token`, run by the provider each time it
+# needs one, rather than from an aws_eks_cluster_auth data source. A token is
+# good for fifteen minutes, and a first apply spends longer than that waiting
+# on the control plane and the Fargate profiles — a token read once up front
+# has expired by the time the first Kubernetes object is created. The price is
+# that the machine running Terraform needs the AWS CLI on its PATH.
+#
+# And whoever runs the first apply is the cluster's admin: access_config in
+# eks.tf grants it to the creating principal. A different IAM principal running
+# a later apply needs an access entry of its own, or every resource in k8s.tf
+# fails with Unauthorized.
+locals {
+  cluster_auth = {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks", "get-token",
+      "--cluster-name", aws_eks_cluster.main.name,
+      "--region", var.aws_region,
+    ]
+  }
+}
+
+provider "kubernetes" {
+  host                   = aws_eks_cluster.main.endpoint
+  cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
+
+  exec {
+    api_version = local.cluster_auth.api_version
+    command     = local.cluster_auth.command
+    args        = local.cluster_auth.args
+  }
+}
+
+provider "helm" {
+  kubernetes = {
+    host                   = aws_eks_cluster.main.endpoint
+    cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
+
+    exec = local.cluster_auth
   }
 }

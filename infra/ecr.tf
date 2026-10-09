@@ -2,8 +2,8 @@ resource "aws_ecr_repository" "app" {
   name = local.name
 
   # Immutable tags mean a tag can never be repointed at different bytes, so
-  # the task definition's image reference is a real record of what ran. It is
-  # also why nothing here ever pushes `:latest` — the two are incompatible.
+  # the Deployment's image reference is a real record of what ran. It is also
+  # why nothing here ever pushes `:latest` — the two are incompatible.
   image_tag_mutability = "IMMUTABLE"
 
   # Without this, `terraform destroy` fails on a repository that still has
@@ -24,10 +24,10 @@ resource "aws_ecr_repository" "app" {
 #
 # The count is what bounds a rollback, though, and two things can reach past
 # it. Five pushes in a row that each fail to roll out leave the image the
-# service is still running in sixth place. And `terraform apply` with an old
+# pods are still running in sixth place. And `terraform apply` with an old
 # image_tag — `deploy.sh --no-build` reads the tag from state, which knows
 # nothing of what CI has pushed since — names an image that may be gone.
-# Either way the symptom is CannotPullContainerError on the next task start.
+# Either way the symptom is ImagePullBackOff the next time a pod starts.
 resource "aws_ecr_lifecycle_policy" "app" {
   repository = aws_ecr_repository.app.name
 

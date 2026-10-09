@@ -1,0 +1,5 @@
+apiVersion: v2
+name: target-group-binding
+description: Binds the app's Service to the load balancer target group that Terraform owns.
+type: application
+version: 0.1.0

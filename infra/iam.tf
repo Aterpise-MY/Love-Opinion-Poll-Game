@@ -1,75 +1,41 @@
-# Two roles that both trust ecs-tasks.amazonaws.com. The difference is who
-# uses them, and getting it backwards is the classic ECS mistake:
+# The role the application itself runs as.
 #
-#   execution role  the Fargate infrastructure, around your container —
-#                   pulling the image, creating the log stream
-#   task role       your code, via the container credential provider at
-#                   169.254.170.2
-#
-# Put the DynamoDB grant on the execution role and the container starts
-# perfectly, then every request fails with AccessDeniedException and nothing
-# in the ECS console hints at why.
+# The roles that surround a pod rather than run inside it — the cluster role
+# and the Fargate pod execution role — are in eks.tf, with a note on which is
+# which. This is the one your code holds: the AWS SDK in the container finds a
+# projected service-account token, trades it at STS for this role, and renews
+# it on its own.
 
-data "aws_iam_policy_document" "assume_role" {
+# The trust policy is the whole boundary. It names one service account in one
+# namespace of one cluster, and both conditions matter: without `sub`, any pod
+# in the cluster could annotate its own service account with this role's ARN
+# and be handed the table.
+data "aws_iam_policy_document" "app_assume" {
   statement {
-    actions = ["sts:AssumeRole"]
+    actions = ["sts:AssumeRoleWithWebIdentity"]
 
     principals {
-      type        = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer}:sub"
+      values   = ["system:serviceaccount:${local.namespace}:${local.name}"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer}:aud"
+      values   = ["sts.amazonaws.com"]
     }
   }
 }
 
-# ---------------------------------------------------------------------------
-# Execution role — infrastructure
-# ---------------------------------------------------------------------------
-
-resource "aws_iam_role" "execution" {
-  name               = "${local.name}-execution"
-  assume_role_policy = data.aws_iam_policy_document.assume_role.json
-  tags               = local.tags
-}
-
-# The image pull is in here and nowhere else. This managed policy carries the
-# ECR read actions and the two CloudWatch Logs ones, which is everything the
-# Fargate infrastructure needs to start a task from a private ECR repository in
-# the same account — so there is no registry statement further down, and there
-# should not be one.
-resource "aws_iam_role_policy_attachment" "execution" {
-  role       = aws_iam_role.execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-# ADMIN_KEY is a `secrets` entry in the container definition, and it is the
-# execution role that resolves those before the container starts — not the
-# task role. This is the same execution/task split as the header, in the one
-# direction that is easy to get wrong twice: the application never calls SSM
-# itself, so granting this to the task role instead produces a task that
-# cannot start, with ResourceInitializationError and no mention of SSM.
-#
-# ssm:GetParameters is the whole grant. kms:Decrypt is required only for a
-# customer managed key; the parameter uses the aws/ssm managed key.
-data "aws_iam_policy_document" "execution_secrets" {
-  statement {
-    actions   = ["ssm:GetParameters"]
-    resources = [aws_ssm_parameter.admin_key.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "execution_secrets" {
-  name   = "secrets"
-  role   = aws_iam_role.execution.id
-  policy = data.aws_iam_policy_document.execution_secrets.json
-}
-
-# ---------------------------------------------------------------------------
-# Task role — the application
-# ---------------------------------------------------------------------------
-
-resource "aws_iam_role" "task" {
-  name               = "${local.name}-task"
-  assume_role_policy = data.aws_iam_policy_document.assume_role.json
+resource "aws_iam_role" "app" {
+  name               = "${local.name}-app"
+  assume_role_policy = data.aws_iam_policy_document.app_assume.json
   tags               = local.tags
 }
 
@@ -91,7 +57,7 @@ data "aws_iam_policy_document" "table_access" {
 
 resource "aws_iam_role_policy" "table_access" {
   name   = "table-access"
-  role   = aws_iam_role.task.id
+  role   = aws_iam_role.app.id
   policy = data.aws_iam_policy_document.table_access.json
 }
 
@@ -116,25 +82,10 @@ data "aws_iam_policy_document" "media_upload" {
 
 resource "aws_iam_role_policy" "media_upload" {
   name   = "media-upload"
-  role   = aws_iam_role.task.id
+  role   = aws_iam_role.app.id
   policy = data.aws_iam_policy_document.media_upload.json
 }
 
-# ECS Exec — the only way to get a shell inside a running task on show day.
-data "aws_iam_policy_document" "exec" {
-  statement {
-    actions = [
-      "ssmmessages:CreateControlChannel",
-      "ssmmessages:CreateDataChannel",
-      "ssmmessages:OpenControlChannel",
-      "ssmmessages:OpenDataChannel",
-    ]
-    resources = ["*"]
-  }
-}
-
-resource "aws_iam_role_policy" "exec" {
-  name   = "ecs-exec"
-  role   = aws_iam_role.task.id
-  policy = data.aws_iam_policy_document.exec.json
-}
+# Nothing here for a shell. `kubectl exec` reaches a Fargate pod through the
+# cluster's API server, on the caller's own Kubernetes permissions, so getting
+# inside a running pod on show day needs no IAM grant on the app's role.

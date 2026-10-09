@@ -58,11 +58,31 @@ output "alb_dns_name" {
 }
 
 output "cluster_name" {
-  value = aws_ecs_cluster.main.name
+  value = aws_eks_cluster.main.name
 }
 
-output "service_name" {
-  value = aws_ecs_service.app.name
+output "namespace" {
+  description = "Where the app's Deployment, Service and Secret live."
+  value       = kubernetes_namespace_v1.app.metadata[0].name
+}
+
+output "deployment_name" {
+  value = kubernetes_deployment_v1.app.metadata[0].name
+}
+
+output "service_ecr_repository_urls" {
+  description = "Push targets for the microservices in services.tf, keyed by service name."
+  value       = { for name, repository in aws_ecr_repository.service : name => repository.repository_url }
+}
+
+output "redis_endpoint" {
+  description = "Primary endpoint the microservices connect to, over TLS. Null until one of them is enabled."
+  value       = local.redis_enabled ? "${aws_elasticache_replication_group.main[0].primary_endpoint_address}:6379" : null
+}
+
+output "kubeconfig_command" {
+  description = "Point kubectl at the cluster. Works for the principal that ran the first apply."
+  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}"
 }
 
 output "target_group_arn" {
@@ -88,14 +108,14 @@ output "github_actions_setup" {
     to the registry host that the ECR login step returns.
   DESC
   value = local.github_oidc_enabled ? {
-    AWS_ROLE_ARN       = aws_iam_role.github[0].arn
-    AWS_REGION         = var.aws_region
-    ECR_REPOSITORY     = aws_ecr_repository.app.name
-    ECS_CLUSTER        = aws_ecs_cluster.main.name
-    ECS_SERVICE        = aws_ecs_service.app.name
-    ECS_TASK_FAMILY    = aws_ecs_task_definition.app.family
-    ECS_CONTAINER_NAME = local.name
-    SITE_URL           = local.site_url
+    AWS_ROLE_ARN   = aws_iam_role.github[0].arn
+    AWS_REGION     = var.aws_region
+    ECR_REPOSITORY = aws_ecr_repository.app.name
+    EKS_CLUSTER    = aws_eks_cluster.main.name
+    K8S_NAMESPACE  = kubernetes_namespace_v1.app.metadata[0].name
+    K8S_DEPLOYMENT = kubernetes_deployment_v1.app.metadata[0].name
+    K8S_CONTAINER  = local.name
+    SITE_URL       = local.site_url
   } : null
 }
 

@@ -5,9 +5,14 @@
 # is no long-lived secret anywhere to leak or rotate.
 #
 # It covers both halves of the deploy job and nothing outside it: push an image
-# to this stack's one ECR repository, then register a task definition revision
-# and roll the service onto it. The same token does both, so there is no
-# registry password in repo secrets either.
+# to this stack's one ECR repository, then point the Deployment at it and watch
+# the rollout. The same token does both, so there is no registry password and
+# no kubeconfig in repo secrets either.
+#
+# The second half is split across two systems, and it is worth knowing which
+# is which. IAM lets the role find the cluster and ask for a token. What that
+# token may then do inside the cluster is Kubernetes RBAC, at the bottom of
+# this file — and that is where the role's reach is actually drawn.
 #
 # Created here but never used here — the workflow does not run Terraform.
 # Set github_repository in terraform.tfvars to switch it on.
@@ -151,9 +156,10 @@ data "aws_iam_policy_document" "github_deploy" {
     resources = ["*"]
   }
 
-  # Push, to this repository and no other. There is deliberately no delete
-  # here and no ecr:PutImageTagMutability — the role can add an image, but it
-  # cannot remove one or repoint a tag that a task definition already names.
+  # Push, to this stack's repositories and no others: the app's, and one per
+  # microservice in services.tf. There is deliberately no delete here and no
+  # ecr:PutImageTagMutability — the role can add an image, but it cannot
+  # remove one or repoint a tag that a Deployment already names.
   statement {
     sid = "EcrPush"
     actions = [
@@ -164,46 +170,21 @@ data "aws_iam_policy_document" "github_deploy" {
       "ecr:PutImage",
       "ecr:UploadLayerPart",
     ]
-    resources = [aws_ecr_repository.app.arn]
+    resources = concat(
+      [aws_ecr_repository.app.arn],
+      [for repository in aws_ecr_repository.service : repository.arn],
+    )
   }
 
-  # Neither of these supports resource-level permissions; AWS rejects the
-  # policy outright if you try to scope them.
+  # The one EKS action in the policy, and all that IAM has to say about the
+  # cluster. `aws eks update-kubeconfig` calls it to learn the endpoint and
+  # the certificate authority. Fetching a token needs no permission at all —
+  # a token is a presigned STS request — and everything the role does with one
+  # is decided by the access entry and the Role below, not here.
   statement {
-    sid = "EcsTaskDefinition"
-    actions = [
-      "ecs:DescribeTaskDefinition",
-      "ecs:RegisterTaskDefinition",
-    ]
-    resources = ["*"]
-  }
-
-  statement {
-    sid = "EcsRollout"
-    actions = [
-      "ecs:DescribeServices",
-      "ecs:UpdateService",
-    ]
-    resources = [aws_ecs_service.app.id]
-  }
-
-  # RegisterTaskDefinition hands these two roles to ECS, and without PassRole
-  # it fails with an AccessDenied that names neither role — the single most
-  # confusing way this pipeline can break. The condition stops the permission
-  # being usable to hand these roles to anything other than a task.
-  statement {
-    sid     = "PassTaskRoles"
-    actions = ["iam:PassRole"]
-    resources = [
-      aws_iam_role.execution.arn,
-      aws_iam_role.task.arn,
-    ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["ecs-tasks.amazonaws.com"]
-    }
+    sid       = "EksDescribe"
+    actions   = ["eks:DescribeCluster"]
+    resources = [aws_eks_cluster.main.arn]
   }
 }
 
@@ -213,4 +194,83 @@ resource "aws_iam_role_policy" "github_deploy" {
   name   = "deploy"
   role   = aws_iam_role.github[0].id
   policy = data.aws_iam_policy_document.github_deploy[0].json
+}
+
+# ---------------------------------------------------------------------------
+# What the role may do inside the cluster
+# ---------------------------------------------------------------------------
+
+locals {
+  deployer_group = "${local.name}-deployers"
+}
+
+# Maps the IAM role to a Kubernetes group and to nothing else. No EKS access
+# policy is associated with it on purpose: the nearest managed one that can
+# change a Deployment is the namespace-scoped edit policy, and edit can also
+# read every Secret in the namespace — the operator console key among them.
+resource "aws_eks_access_entry" "github" {
+  count = local.github_oidc_enabled ? 1 : 0
+
+  cluster_name      = aws_eks_cluster.main.name
+  principal_arn     = aws_iam_role.github[0].arn
+  type              = "STANDARD"
+  kubernetes_groups = [local.deployer_group]
+
+  tags = local.tags
+}
+
+# Enough to set a new image and watch it roll out, in one namespace. `patch`
+# on deployments is what `kubectl set image` uses and what `kubectl rollout
+# undo` uses; the read-only rules are what make a failed rollout diagnosable
+# from the workflow log instead of from someone's laptop.
+#
+# There is no rule for secrets, so the key in k8s.tf stays unreadable to CI.
+# There is no `create` or `delete` either: the role can move the Deployment to
+# another image, and it cannot replace it with a different one.
+resource "kubernetes_role_v1" "deployer" {
+  count = local.github_oidc_enabled ? 1 : 0
+
+  metadata {
+    name      = local.deployer_group
+    namespace = kubernetes_namespace_v1.app.metadata[0].name
+  }
+
+  rule {
+    api_groups = ["apps"]
+    resources  = ["deployments"]
+    verbs      = ["get", "list", "watch", "patch"]
+  }
+
+  rule {
+    api_groups = ["apps"]
+    resources  = ["replicasets"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["pods", "pods/log", "events"]
+    verbs      = ["get", "list", "watch"]
+  }
+}
+
+resource "kubernetes_role_binding_v1" "deployer" {
+  count = local.github_oidc_enabled ? 1 : 0
+
+  metadata {
+    name      = local.deployer_group
+    namespace = kubernetes_namespace_v1.app.metadata[0].name
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Role"
+    name      = kubernetes_role_v1.deployer[0].metadata[0].name
+  }
+
+  subject {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "Group"
+    name      = local.deployer_group
+  }
 }
