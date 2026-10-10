@@ -102,17 +102,6 @@ export default function Phone() {
       });
   }, [state?.epoch, voterId, named]);
 
-  // The name can be changed until the first question opens, and what says so
-  // is the state as last polled — the phone follows the room by a poll.
-  const canRename = canEditName(state);
-
-  // Leaving the first lobby drops an edit that was still open, and keeps it
-  // dropped: when the operator undoes back into that lobby the phone shows the
-  // button again, not a form nobody asked for a second time.
-  useEffect(() => {
-    if (!canRename) setRenaming(false);
-  }, [canRename]);
-
   function keepName(next) {
     saveName(next);
     setName(next);
@@ -135,11 +124,29 @@ export default function Phone() {
 
   useEffect(() => setNotice(null), [qIndex, state?.phase]);
 
+  const voting = state?.phase === "VOTING";
+  const canAnswer = voting && !myChoice && !expired;
+
+  // The name can be changed at any time except under a question this phone
+  // has yet to answer: the form takes the whole screen, and a player lost in
+  // it would miss the vote. Once they have voted, or the time is up, it is
+  // offered; so it is in the lobby and while the question is locked. What is
+  // typed is read by the next vote (see vote above), never one in flight.
+  // The state is as last polled — the phone follows the room by a poll.
+  const canRename = canEditName(state, canAnswer);
+
+  // A question opening under an edit drops it, and keeps it dropped: the form
+  // never comes back on its own, only from the button.
+  useEffect(() => {
+    if (!canRename) setRenaming(false);
+  }, [canRename]);
+
   async function vote(choice) {
     setPending(choice);
     setNotice(null);
     try {
-      await postVote(voterId, qIndex, choice);
+      // The stored name, read now: a rename made after the last vote counts.
+      await postVote(voterId, qIndex, choice, name);
       setChoices(setChoice(qIndex, choice));
     } catch (err) {
       const code = err instanceof ApiError ? err.code : null;
@@ -200,7 +207,7 @@ export default function Phone() {
   // would otherwise cover the whole screen. Somebody who scans late gets the
   // form first as well, whatever the wall is showing.
   //
-  // The same form comes back from the first lobby for a change of name. It
+  // The same form comes back for a change of name. It
   // needs both halves of the condition: `renaming` alone would hold the form
   // up for the one render between the game moving on and the effect above
   // noticing.
@@ -210,18 +217,10 @@ export default function Phone() {
         <header className="phone__bar">
           {offline && <span className="pill pill--warn">网络断了</span>}
         </header>
-        <NameEntry
-          current={name}
-          canChangeLater={canRename}
-          onSubmit={keepName}
-          onCancel={() => setRenaming(false)}
-        />
+        <NameEntry current={name} onSubmit={keepName} onCancel={() => setRenaming(false)} />
       </main>
     );
   }
-
-  const voting = state.phase === "VOTING";
-  const canAnswer = voting && !myChoice && !expired;
 
   return (
     <main className="phone">
@@ -243,7 +242,7 @@ export default function Phone() {
         <>
           {/* A conversation, the way the poster draws one: the room says it is
               ready, by name, and the other side is still typing. The name is
-              in a span of its own so that twenty letters with no space among
+              in a span of its own so that twelve letters with no space among
               them wrap inside the bubble instead of running out of it. */}
           <ChatNote
             title={
@@ -257,9 +256,6 @@ export default function Phone() {
           >
             看大屏幕，马上开始
           </ChatNote>
-          {/* Offered in the first lobby only. Every later lobby greets by the
-              same name and has no button, which is all "fixed" needs to look
-              like. */}
           {canRename && (
             <button type="button" className="phone__rename" onClick={() => setRenaming(true)}>
               {NAME_TEXT.rename.open}
@@ -347,6 +343,13 @@ export default function Phone() {
 
           {voting && remaining != null && (
             <PhoneCountdown remaining={remaining} duration={question?.duration} stale={stale} />
+          )}
+
+          {/* After the vote, or once the question is locked: see canRename. */}
+          {canRename && (
+            <button type="button" className="phone__rename" onClick={() => setRenaming(true)}>
+              {NAME_TEXT.rename.open}
+            </button>
           )}
         </>
       )}

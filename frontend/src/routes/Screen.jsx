@@ -5,6 +5,7 @@ import { bodyLayoutOf, useQuestions } from "../lib/content.js";
 import { useCountdown, useGameState, useRampUp } from "../lib/hooks.js";
 import { Deco, PixelIcon, Shares } from "../lib/ui.jsx";
 import { JoinBoard } from "./JoinBoard.jsx";
+import VoteBubbles from "./VoteBubbles.jsx";
 
 const POLL_MS = 1000;
 const URGENT_MS = 10_000;
@@ -126,6 +127,9 @@ export default function Screen() {
             qIndex={state.qIndex}
             plain={noPhones}
           />
+
+          {/* Who just voted, in the strip between the ballot and the clock. */}
+          <VoteBubbles state={state} questions={questions} />
 
           {state.phase === "VOTING" && !expired && (
             <Countdown remaining={remaining} duration={question?.duration} stale={stale} />

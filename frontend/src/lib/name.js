@@ -1,11 +1,12 @@
-// What a name has to be, and when the phone still lets one be changed. Like
+// What a name has to be, and when the phone offers to change one. Like
 // choices.js this imports nothing and touches no browser API, so it runs under
-// plain node --test — which is the only place these rules are pinned, because
-// nothing on the server knows about names yet.
+// plain node --test.
 
-// Long enough for a full name or a nickname with a flourish, short enough to
-// sit in the lobby's speech bubble on the narrowest phone in the room.
-export const NAME_MAX = 20;
+// Long enough for a nickname, short enough for the bubble on the projector and
+// for the lobby's on the narrowest phone in the room. The server cuts a name
+// to the same 12 code points (sanitizeName in backend/game.js); this refuses
+// past it instead, so nobody's name is shortened behind their back.
+export const NAME_MAX = 12;
 
 /**
  * Length the way a person counts it: one for a Chinese character, and one for
@@ -53,11 +54,34 @@ export function checkName(raw) {
 }
 
 /**
- * Can the name still be changed? Only in the first lobby.
+ * Is the rename button on offer in this state?
  *
- * The phase alone does not say that: the room is back in LOBBY before every
- * question. It is the lobby of question one, so skipping that question fixes
- * the name and undoing the skip frees it again — this reads the state it is
- * given and remembers nothing.
+ * Any time, with one exception: while a question is open and this phone has not
+ * answered it. The form takes over the whole screen, and an unanswered
+ * question covered by it is a vote lost to a keyboard. Once the player has
+ * voted (or the time has run out) the form is safe, and the name typed there is
+ * the one the next vote carries. The reveal and the recap are full-bleed and
+ * have no room for the button.
+ *
+ * @param {{phase?: string}|null|undefined} state
+ * @param {boolean} [answering] a question is open and this phone can still answer it
  */
-export const canEditName = (state) => state?.phase === "LOBBY" && state.qIndex === 0;
+export function canEditName(state, answering = false) {
+  switch (state?.phase) {
+    case "LOBBY":
+    case "LOCKED":
+      return true;
+    case "VOTING":
+      return !answering;
+    default:
+      return false;
+  }
+}
+
+/**
+ * The part of a vote's body that carries the name: `{name}` for a usable one
+ * and nothing at all otherwise, so a phone without a name sends the vote as it
+ * always did. The server sanitises whatever arrives; this only keeps empty and
+ * non-text values off the wire.
+ */
+export const nameField = (name) => (typeof name === "string" && name !== "" ? { name } : {});

@@ -1040,7 +1040,7 @@ button {
 }
 
 /* A name inside a sentence. Breakable between any two characters: a name can
-   be twenty letters with no space among them, and a bubble is as wide as the
+   be twelve letters with no space among them, and a bubble is as wide as the
    longest run it cannot break. */
 .phone__name-shown {
   word-break: break-all;
@@ -1245,6 +1245,75 @@ button {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+/* Who just voted. A row of its own in the screen's column, between the ballot
+   and the countdown: it is given height by the stage, so it never lies over the
+   question or the tally. Reserved for the whole of VOTING, which is why it has a
+   height even with no bubble in it. The bubbles line up from the left, newest
+   last. The tail a .bubble normally has is dropped: it would be cut by the
+   overflow, and the colour already says whose it is. */
+.vote-bubbles {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: clamp(10px, 1.2vw, 22px);
+  height: clamp(52px, 7.5vh, 84px);
+  overflow: hidden;
+  padding-bottom: 14px;
+}
+.vote-bubble {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 14px;
+  background: var(--key, var(--white));
+  color: var(--on-key, var(--ink));
+  font-size: clamp(0.95rem, 1.3vw, 1.4rem);
+  font-weight: 700;
+  line-height: 1.35;
+  /* One line, never wrapped. A bubble keeps its own width (the row clips
+     rather than squeezing a short name), so the cuts are per part: a name
+     past seven characters and an option past fourteen end in an ellipsis. */
+  overflow: hidden;
+  white-space: pre;
+  animation: vote-bubble 3.5s both;
+}
+.vote-bubble__who,
+.vote-bubble__what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vote-bubble__who {
+  max-width: 7em;
+}
+.vote-bubble__what {
+  flex: 0 0 auto;
+  max-width: 14em;
+}
+.vote-bubble::after {
+  display: none;
+}
+@keyframes vote-bubble {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateY(12px);
+  }
+  8% {
+    opacity: 1;
+    transform: scale(1.06) translateY(0);
+  }
+  14% {
+    transform: scale(1);
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* STAGE 1/5, as a yellow badge. */

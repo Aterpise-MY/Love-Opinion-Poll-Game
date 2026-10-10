@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { NAME_MAX, canEditName, checkName, countCodePoints } from "./name.js";
+import { NAME_MAX, canEditName, checkName, countCodePoints, nameField } from "./name.js";
 
 const refused = (code) => ({ ok: false, code });
 const accepted = (name) => ({ ok: true, name });
@@ -56,26 +56,26 @@ test("what is not text is empty too, so a damaged stored name asks again", () =>
   }
 });
 
-test("twenty is allowed and twenty-one is not", () => {
-  assert.equal(NAME_MAX, 20);
+test("twelve is allowed and thirteen is not", () => {
+  assert.equal(NAME_MAX, 12);
   for (const unit of ["字", "w", "é"]) {
-    assert.deepEqual(checkName(unit.repeat(20)), accepted(unit.repeat(20)), unit);
-    assert.deepEqual(checkName(unit.repeat(21)), refused("TOO_LONG"), unit);
+    assert.deepEqual(checkName(unit.repeat(12)), accepted(unit.repeat(12)), unit);
+    assert.deepEqual(checkName(unit.repeat(13)), refused("TOO_LONG"), unit);
   }
 });
 
 test("an emoji counts once, though it is two UTF-16 units", () => {
-  const twenty = "😀".repeat(20);
-  assert.equal(twenty.length, 40);
-  assert.deepEqual(checkName(twenty), accepted(twenty));
-  assert.deepEqual(checkName("😀".repeat(21)), refused("TOO_LONG"));
-  // Mixed: ten of each is still twenty.
-  assert.deepEqual(checkName("字😀".repeat(10)), accepted("字😀".repeat(10)));
-  assert.deepEqual(checkName(`${"字😀".repeat(10)}a`), refused("TOO_LONG"));
+  const twelve = "😀".repeat(12);
+  assert.equal(twelve.length, 24);
+  assert.deepEqual(checkName(twelve), accepted(twelve));
+  assert.deepEqual(checkName("😀".repeat(13)), refused("TOO_LONG"));
+  // Mixed: six of each is still twelve.
+  assert.deepEqual(checkName("字😀".repeat(6)), accepted("字😀".repeat(6)));
+  assert.deepEqual(checkName(`${"字😀".repeat(6)}a`), refused("TOO_LONG"));
 });
 
 test("the length is measured after trimming, never before", () => {
-  const name = "字".repeat(20);
+  const name = "字".repeat(12);
   assert.deepEqual(checkName(`   ${name}${FULL_WIDTH_SPACE}${FULL_WIDTH_SPACE}`), accepted(name));
 });
 
@@ -121,33 +121,40 @@ test("code points are counted, not UTF-16 units and not what the eye sees", () =
   assert.equal(countCodePoints(man + joiner + woman + joiner + girl), 5); // one family on screen
 });
 
-test("the name can be changed in the first lobby and nowhere else", () => {
-  assert.equal(canEditName({ phase: "LOBBY", qIndex: 0 }), true);
+test("the name can be changed in the lobby, whichever question is next", () => {
+  for (const qIndex of [0, 1, 7]) {
+    assert.equal(canEditName({ phase: "LOBBY", qIndex }), true, String(qIndex));
+  }
+});
 
-  // Every later lobby is the same phase, and locked.
-  assert.equal(canEditName({ phase: "LOBBY", qIndex: 1 }), false);
-  assert.equal(canEditName({ phase: "LOBBY", qIndex: 7 }), false);
+test("the name can be changed once the question is locked", () => {
+  assert.equal(canEditName({ phase: "LOCKED", qIndex: 2 }), true);
+});
 
-  // Question one itself, from the moment it opens.
-  for (const phase of ["VOTING", "LOCKED", "REVEAL", "FINAL"]) {
+test("the name can be changed under an open question only once it is answered", () => {
+  const voting = { phase: "VOTING", qIndex: 0 };
+  assert.equal(canEditName(voting, true), false); // still to answer: never cover it
+  assert.equal(canEditName(voting, false), true); // voted, or the time is up
+  assert.equal(canEditName(voting), true);
+});
+
+test("the reveal and the recap have no button", () => {
+  for (const phase of ["REVEAL", "FINAL"]) {
     assert.equal(canEditName({ phase, qIndex: 0 }), false, phase);
   }
 });
 
-test("skipping the first question locks the name, and undoing the skip frees it", () => {
-  const first = { phase: "LOBBY", qIndex: 0, epoch: 1 };
-  const skipped = { phase: "LOBBY", qIndex: 1, epoch: 1 };
-  assert.deepEqual([first, skipped, first].map(canEditName), [true, false, true]);
-  // A RESET lands in the first lobby of a new run.
-  assert.equal(canEditName({ phase: "LOBBY", qIndex: 0, epoch: 2 }), true);
-});
-
-test("no state, or a state without the two fields, is not a lobby", () => {
+test("no state, or an unknown phase, offers nothing", () => {
   assert.equal(canEditName(null), false);
   assert.equal(canEditName(undefined), false);
   assert.equal(canEditName({}), false);
-  assert.equal(canEditName({ phase: "LOBBY" }), false);
-  assert.equal(canEditName({ qIndex: 0 }), false);
-  // The index is a number on the wire; a string is not question one.
-  assert.equal(canEditName({ phase: "LOBBY", qIndex: "0" }), false);
+  assert.equal(canEditName({ phase: "NOPE" }), false);
+});
+
+test("a vote carries the name only when there is one", () => {
+  assert.deepEqual(nameField("小明"), { name: "小明" });
+  assert.deepEqual(nameField("Li Lei"), { name: "Li Lei" });
+  for (const none of [null, undefined, "", 7, {}, []]) {
+    assert.deepEqual(nameField(none), {}, String(none));
+  }
 });

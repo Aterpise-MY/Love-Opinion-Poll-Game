@@ -11,20 +11,18 @@ export const NAME_TEXT = {
   label: "名字",
   placeholder: `名字或昵称，最多 ${NAME_MAX} 个字`,
 
-  // Asked on the way in. The second line depends on whether the game has
-  // started: somebody arriving late is told before they commit to a typo.
+  // Asked on the way in. The name goes up on the projector with each vote.
   join: {
     title: "怎么称呼你？",
-    hintOpen: "写个名字就能加入，开始前还能改",
-    hintLocked: "已经开始了，名字写好就不能再改",
+    hint: "投票时大屏幕会显示你的名字，之后还能改",
     submit: "加入",
   },
 
-  // Changing it, which only the first lobby offers.
+  // Changing it, which any time offers except under an unanswered question.
   rename: {
     open: "改名字",
     title: "想改成什么？",
-    hint: "开始前都能改",
+    hint: "随时都能改，下一次投票就用新名字",
     submit: "改好了",
     cancel: "不改了",
   },
@@ -41,8 +39,9 @@ export const NAME_TEXT = {
 };
 
 /**
- * The name form: asked once before the lobby, and offered again from the first
- * lobby for anyone who wants to change what they typed.
+ * The name form: asked once before the lobby, and offered again whenever the
+ * phone is not in the middle of a question, for anyone who wants to change
+ * what they typed.
  *
  * The field is left entirely to the browser while it is being typed in. A
  * Chinese keyboard composes a character over several keystrokes, with the
@@ -52,25 +51,21 @@ export const NAME_TEXT = {
  *
  *   - it is uncontrolled: React is never the one that sets its value;
  *   - it has no maxLength, which counts UTF-16 units, refuses the pinyin for
- *     the twentieth character, and can cut an emoji in half;
+ *     the last character, and can cut an emoji in half;
  *   - the name is checked once, on submit, from what the field holds then.
  *
  * @param {object} props
  * @param {string|null} props.current  the name being changed, or null when
  *   this is the first time of asking.
- * @param {boolean} props.canChangeLater  whether the game is still in the
- *   first lobby. Only chooses the hint under the question.
  * @param {(name: string) => void} props.onSubmit  given the trimmed name.
  * @param {() => void} [props.onCancel]  leave the name as it was.
  */
-export default function NameEntry({ current = null, canChangeLater, onSubmit, onCancel }) {
+export default function NameEntry({ current = null, onSubmit, onCancel }) {
   const field = useRef(null);
   const [error, setError] = useState(null);
 
   const renaming = current !== null;
   const text = renaming ? NAME_TEXT.rename : NAME_TEXT.join;
-  const hint = renaming ? text.hint : canChangeLater ? text.hintOpen : text.hintLocked;
-
   function submit(event) {
     event.preventDefault();
     const checked = checkName(field.current.value);
@@ -87,7 +82,7 @@ export default function NameEntry({ current = null, canChangeLater, onSubmit, on
     <form className="phone__center phone__chat phone__name" noValidate onSubmit={submit}>
       <p className="bubble phone__chat-in">
         <strong>{text.title}</strong>
-        {hint}
+        {text.hint}
       </p>
 
       <input

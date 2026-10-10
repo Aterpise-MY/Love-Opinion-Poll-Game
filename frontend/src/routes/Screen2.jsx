@@ -1,5 +1,7 @@
 import { JoinBoard } from "./JoinBoard.jsx";
+import { useQuestions } from "../lib/content.js";
 import { useGameState } from "../lib/hooks.js";
+import VoteBubbles from "./VoteBubbles.jsx";
 
 // Slower than /screen's 1s. This board has exactly one moving part — the join
 // count — and nothing on it is time-critical, so there is no reason for a
@@ -20,7 +22,8 @@ const POLL_MS = 3000;
  * the same size from setup until the room empties, on a side screen or a
  * second monitor, while /screen runs the show. No phase, no countdown, no
  * results — if it ever changed, someone would be looking at it at the moment
- * it did.
+ * it did. The one exception is the strip of vote bubbles along the bottom,
+ * which appears while a question is open and is gone when it closes.
  *
  * Offline mode is the one thing it does follow, because then the QR is a
  * promise the room cannot use: the board becomes the same poster without a
@@ -29,6 +32,7 @@ const POLL_MS = 3000;
  */
 export default function Screen2() {
   const { state, offline } = useGameState(POLL_MS);
+  const [questions] = useQuestions(state?.contentVersion);
 
   return (
     <main className="screen">
@@ -39,6 +43,7 @@ export default function Screen2() {
           code to scan, so it is the same poster without one. Still nothing
           here follows the phase. */}
       <JoinBoard joined={state ? state.joined : null} noPhones={Boolean(state?.offline)} />
+      <VoteBubbles state={state} questions={questions} />
     </main>
   );
 }
