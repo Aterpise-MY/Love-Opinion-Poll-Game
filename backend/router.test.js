@@ -1698,3 +1698,139 @@ test("RESET keeps offline mode — it is a setting, not part of the run", async 
   await api.admin("OFFLINE_OFF");
   assert.equal((await api.admin("RESET", NOW + 900)).body.offline, false);
 });
+
+// ---------------------------------------------------------------------------
+// Recent votes: the projector's name bubbles.
+
+const voteWith = (api, voterId, body, now = NOW) =>
+  api.router({ method: "POST", path: "/vote", body: { voterId, qIndex: 0, ...body }, now });
+const recent = async (api, now = NOW) => (await api.state(now)).body.recentVotes;
+
+test("a vote with a name shows up in /state during VOTING, without the voterId", async () => {
+  const api = harness();
+  assert.deepEqual(await recent(api), [], "empty in the lobby");
+  await api.admin("START");
+  const res = await voteWith(api, "voter-aaaa", { choice: "b", name: "  小明  " });
+  assert.equal(res.status, 200);
+
+  assert.deepEqual(await recent(api), [{ id: 1, name: "小明", choice: "b", qIndex: 0, at: NOW }]);
+  assert.equal(JSON.stringify(await recent(api)).includes("voter-aaaa"), false);
+});
+
+test("a vote without a name, or with a junk one, still counts and has a null name", async () => {
+  const api = harness();
+  await api.admin("START");
+  assert.equal((await voteWith(api, "voter-aaaa", { choice: "a" })).status, 200);
+  assert.equal((await voteWith(api, "voter-bbbb", { choice: "a", name: 42 })).status, 200);
+  assert.equal((await voteWith(api, "voter-cccc", { choice: "a", name: "   " })).status, 200);
+
+  const feed = await recent(api);
+  assert.deepEqual(
+    feed.map((e) => [e.id, e.name]),
+    [
+      [1, null],
+      [2, null],
+      [3, null],
+    ],
+  );
+  assert.deepEqual((await api.state()).body.tally, tally({ a: 3 }));
+});
+
+test("the name is sanitised before it is stored", async () => {
+  const api = harness();
+  await api.admin("START");
+  await voteWith(api, "voter-aaaa", { choice: "a", name: "a\nb" + "x".repeat(30) });
+  assert.equal((await recent(api))[0].name, "a b" + "x".repeat(9));
+});
+
+test("a repeat vote (409 ALREADY_VOTED) adds no second entry and keeps the first name", async () => {
+  const api = harness();
+  await api.admin("START");
+  await voteWith(api, "voter-aaaa", { choice: "a", name: "First" });
+  const again = await voteWith(api, "voter-aaaa", { choice: "b", name: "Second" });
+  assert.equal(again.status, 409);
+  assert.equal(again.body.error ?? again.body.code, "ALREADY_VOTED");
+
+  const feed = await recent(api);
+  assert.equal(feed.length, 1);
+  assert.equal(feed[0].name, "First");
+});
+
+test("a rejected vote adds no entry", async () => {
+  const api = harness();
+  assert.equal((await voteWith(api, "voter-aaaa", { choice: "a", name: "Early" })).status, 409);
+  await api.admin("START");
+  assert.equal((await voteWith(api, "voter-aaaa", { choice: "z", name: "Bad" })).status, 400);
+  assert.deepEqual(await recent(api), []);
+});
+
+test("recentVotes is empty outside VOTING and holds only the current question", async () => {
+  const api = harness();
+  await api.admin("START");
+  await voteWith(api, "voter-aaaa", { choice: "a", name: "Q1" });
+  assert.equal((await recent(api)).length, 1);
+
+  await api.admin("LOCK");
+  assert.deepEqual(await recent(api), [], "LOCKED");
+  await api.admin("REVEAL");
+  assert.deepEqual(await recent(api), [], "REVEAL");
+
+  await api.admin("NEXT");
+  const s = (await api.state()).body;
+  if (s.phase !== "VOTING") await api.admin("START");
+  assert.equal((await api.state()).body.phase, "VOTING");
+  assert.deepEqual(await recent(api), [], "question 2 does not inherit question 1's entries");
+
+  await api.router({
+    method: "POST",
+    path: "/vote",
+    body: { voterId: "voter-aaaa", qIndex: 1, choice: "c", name: "Q2" },
+    now: NOW,
+  });
+  assert.deepEqual(
+    (await recent(api)).map((e) => [e.name, e.qIndex]),
+    [["Q2", 1]],
+  );
+});
+
+test("RESET clears the feed, and ids keep increasing afterwards", async () => {
+  const api = harness();
+  await api.admin("START");
+  await voteWith(api, "voter-aaaa", { choice: "a", name: "Before" });
+  await api.admin("RESET");
+  await api.admin("START");
+  assert.deepEqual(await recent(api), []);
+  await voteWith(api, "voter-aaaa", { choice: "a", name: "After" });
+  const feed = await recent(api);
+  assert.equal(feed.length, 1);
+  assert.equal(feed[0].id, 2);
+});
+
+test("the feed is bounded to the newest 30, oldest dropped", async () => {
+  const api = harness();
+  await api.admin("START");
+  for (let i = 0; i < 35; i++) {
+    await voteWith(api, `voter-${String(i).padStart(4, "0")}`, { choice: "a", name: `n${i}` });
+  }
+  const feed = await recent(api);
+  assert.equal(feed.length, 30);
+  assert.equal(feed[0].id, 6);
+  assert.equal(feed.at(-1).id, 35);
+});
+
+test("a failing feed write never fails the vote", async () => {
+  const store = createMemoryStore();
+  store.appendRecentVote = async () => {
+    throw new Error("throttled");
+  };
+  const api = harness(fakeImages(), store);
+  await api.admin("START");
+  const log = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await voteWith(api, "voter-aaaa", { choice: "a", name: "X" })).status, 200);
+  } finally {
+    console.error = log;
+  }
+  assert.deepEqual((await api.state()).body.tally, tally({ a: 1 }));
+});

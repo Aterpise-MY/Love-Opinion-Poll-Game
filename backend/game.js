@@ -460,3 +460,31 @@ export function validateVote(state, { qIndex, choice }, now) {
 export function tallyVisible(phase) {
   return phase === "VOTING" || phase === "LOCKED" || phase === "REVEAL" || phase === "FINAL";
 }
+
+export const NAME_MAX_CODE_POINTS = 12;
+
+// How many accepted votes the recent-votes feed remembers (newest last).
+export const RECENT_VOTES_LIMIT = 30;
+
+/**
+ * A player's display name as it may be shown on the wall: a string of at most
+ * NAME_MAX_CODE_POINTS Unicode code points, or null for "no name".
+ *
+ * Never throws and never rejects: a missing, non-string or empty name is simply
+ * anonymous, because the vote it rode in on must still count. Line breaks and
+ * other whitespace runs become one space; remaining control characters and
+ * bidi override/isolate marks are dropped (the latter can reorder the text
+ * around the bubble). Everything else is kept — Chinese, emoji, duplicates —
+ * and no word list is applied. Length is counted in code points, so a surrogate
+ * pair is one character, not two.
+ */
+export function sanitizeName(raw) {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw
+    .replace(/[\s\p{Zl}\p{Zp}]+/gu, " ")
+    .replace(/[\p{Cc}\u202A-\u202E\u2066-\u2069]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const name = Array.from(cleaned).slice(0, NAME_MAX_CODE_POINTS).join("").trim();
+  return name === "" ? null : name;
+}

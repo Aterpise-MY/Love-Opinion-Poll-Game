@@ -9,6 +9,7 @@ import {
   PHASES,
   initialState,
   reduce,
+  sanitizeName,
   tallyVisible,
   validateVote,
 } from "./game.js";
@@ -592,4 +593,40 @@ test("no vote is taken offline, whatever the phase", () => {
   assert.deepEqual(validateVote({ ...voting, offline: false }, { qIndex: 0, choice: "a" }, NOW), {
     ok: true,
   });
+});
+
+test("sanitizeName: absent, non-string and blank names are no name", () => {
+  for (const raw of [undefined, null, 42, {}, [], true, "", "   ", "\n\t \r\n", "\u0000\u0007"]) {
+    assert.equal(sanitizeName(raw), null, JSON.stringify(raw));
+  }
+});
+
+test("sanitizeName: trims, collapses whitespace and turns line breaks into spaces", () => {
+  assert.equal(sanitizeName("  Mei   Ling  "), "Mei Ling");
+  assert.equal(sanitizeName("a\nb\r\nc d"), "a b c d");
+});
+
+test("sanitizeName: strips control and bidi override characters", () => {
+  assert.equal(sanitizeName("Al\u0000i\u0007ce\u007f"), "Alice");
+  assert.equal(sanitizeName("‮evil‬"), "evil");
+});
+
+test("sanitizeName: Chinese, emoji and duplicates are kept as typed", () => {
+  assert.equal(sanitizeName("小明"), "小明");
+  assert.equal(sanitizeName("🌹 Rose"), "🌹 Rose");
+});
+
+test("sanitizeName: caps at 12 code points, not UTF-16 units", () => {
+  assert.equal(sanitizeName("abcdefghijkl"), "abcdefghijkl");
+  assert.equal(sanitizeName("abcdefghijklm"), "abcdefghijkl");
+  const han = "一二三四五六七八九十甲乙丙";
+  assert.equal(sanitizeName(han), "一二三四五六七八九十甲乙");
+  // 13 astral emoji: each is two UTF-16 units, one code point.
+  const out = sanitizeName("😀".repeat(13));
+  assert.equal(Array.from(out).length, 12);
+  assert.equal(out, "😀".repeat(12), "no lone surrogate left at the cut");
+});
+
+test("sanitizeName: trailing space exposed by the cut is trimmed", () => {
+  assert.equal(sanitizeName("abcdefghijk lmn"), "abcdefghijk");
 });
