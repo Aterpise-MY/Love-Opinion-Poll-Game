@@ -9,6 +9,7 @@ import {
   OPTION_KEYS,
   initialState,
   reduce,
+  sanitizeName,
   validateVote,
   tallyVisible,
 } from "./game.js";
@@ -228,6 +229,7 @@ export function createRouter({ store, defaults, adminKey, images = null }) {
 
     if (method === "POST" && path === "/vote") {
       const { voterId, qIndex, choice } = body ?? {};
+      const name = sanitizeName(body?.name);
       if (typeof voterId !== "string" || voterId.length < 8 || voterId.length > 64) {
         return fail(400, "BAD_VOTER_ID");
       }
@@ -239,6 +241,12 @@ export function createRouter({ store, defaults, adminKey, images = null }) {
 
       const recorded = await store.recordVote({ qIndex, voterId, choice, now });
       if (!recorded) return fail(409, "ALREADY_VOTED");
+      // Best effort: the vote is already counted, and a bubble is decoration.
+      try {
+        await store.appendRecentVote({ name, choice, qIndex, now });
+      } catch (err) {
+        console.error("recent-votes feed write failed", err?.name ?? err);
+      }
       return json(200, { ok: true });
     }
 
@@ -769,7 +777,16 @@ async function buildState({ store, defaults, now, isAdmin }) {
     questionCount: questions.length,
     tally: null,
     results: null,
+    // Who just voted, for the projector's name bubbles: [{ id, name, choice,
+    // qIndex, at }], oldest first, current question only, VOTING only. Never
+    // carries a voterId.
+    recentVotes: [],
   };
+
+  if (state.phase === "VOTING") {
+    const feed = await store.getRecentVotes();
+    response.recentVotes = feed.filter((entry) => entry.qIndex === state.qIndex);
+  }
 
   // Counts are public from the moment voting opens. This is the line that
   // decides who sees them, and when.

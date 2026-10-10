@@ -1,7 +1,7 @@
 // In-process storage for local development and rehearsal. Same interface as
 // store-dynamo.js. State lives only as long as the process does.
 
-import { OPTION_KEYS, initialState } from "./game.js";
+import { OPTION_KEYS, RECENT_VOTES_LIMIT, initialState } from "./game.js";
 import { pickShard, shardSk, tallySks } from "./tally.js";
 
 /**
@@ -19,6 +19,11 @@ export function createMemoryStore({ epoch = 0 } = {}) {
   const tallies = new Map();
   const voters = new Set(); // `${qIndex}#${voterId}`
   const joiners = new Set();
+  // The recent-votes feed: newest last, capped. `feedSeq` is deliberately not
+  // cleared by reset() so ids stay increasing across a RESET; a projector that
+  // remembers "last seen id 40" must not see id 1 and think it is old news.
+  let feed = [];
+  let feedSeq = 0;
   const content = new Map(); // slot id -> authored question content
   let meta = {}; // slot id -> { duration } override set from the setup page
   // The live question list, as an ordered array of slot ids — null until the
@@ -109,6 +114,16 @@ export function createMemoryStore({ epoch = 0 } = {}) {
       return true;
     },
 
+    async appendRecentVote({ name = null, choice, qIndex, now = Date.now() }) {
+      feedSeq += 1;
+      feed.push({ id: feedSeq, name, choice, qIndex, at: now });
+      if (feed.length > RECENT_VOTES_LIMIT) feed = feed.slice(-RECENT_VOTES_LIMIT);
+    },
+
+    async getRecentVotes() {
+      return feed.map((entry) => ({ ...entry }));
+    },
+
     async recordJoin(voterId) {
       if (joiners.has(voterId)) return false;
       joiners.add(voterId);
@@ -141,6 +156,7 @@ export function createMemoryStore({ epoch = 0 } = {}) {
       tallies.clear();
       voters.clear();
       joiners.clear();
+      feed = [];
     },
   };
 }

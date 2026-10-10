@@ -9,12 +9,19 @@ import {
   BatchGetItemCommand,
   BatchWriteItemCommand,
   DeleteItemCommand,
+  PutItemCommand,
   QueryCommand,
   TransactWriteItemsCommand,
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 
-import { GAME_DURATION_MS, JOIN_DURATION_MS, OPTION_KEYS, initialState } from "./game.js";
+import {
+  GAME_DURATION_MS,
+  JOIN_DURATION_MS,
+  OPTION_KEYS,
+  RECENT_VOTES_LIMIT,
+  initialState,
+} from "./game.js";
 import { pickShard, shardSk, tallySks } from "./tally.js";
 
 const TTL_DAYS = 7;
@@ -340,6 +347,67 @@ export function createDynamoStore({ tableName, gameId = "game#1", region, client
       );
     },
 
+    // The recent-votes feed, for the projector's name bubbles. One small item
+    // per accepted vote, `feed#<12-digit sequence>`, rather than one shared
+    // list item: a read-modify-write on a single list would be contended by
+    // every voter in the first seconds after START, which is the exact burst
+    // the tally shards exist for. The sequence comes from an atomic ADD on
+    // `feed-seq` (UpdateItem, not a transaction, so there is nothing to
+    // conflict with), which gives each vote a unique, increasing id with no
+    // condition to lose. Zero-padded so the sort key orders numerically.
+    //
+    // Best effort by design: the router calls this after the vote has already
+    // been counted and swallows a failure, so a throttled feed write costs one
+    // bubble, never a vote. Items carry the same TTL as votes; the cap is
+    // applied on read (newest RECENT_VOTES_LIMIT), and RESET deletes them.
+    async appendRecentVote({ name = null, choice, qIndex, now }) {
+      const res = await ddb.send(
+        new UpdateItemCommand({
+          TableName: tableName,
+          Key: key("feed-seq"),
+          UpdateExpression: "SET #ttl = :ttl ADD #n :one",
+          ExpressionAttributeNames: { "#ttl": "ttl", "#n": "n" },
+          ExpressionAttributeValues: { ":one": { N: "1" }, ":ttl": { N: ttlAt(now) } },
+          ReturnValues: "UPDATED_NEW",
+        }),
+      );
+      const id = Number(res?.Attributes?.n?.N);
+      await ddb.send(
+        new PutItemCommand({
+          TableName: tableName,
+          Item: {
+            ...key(`feed#${String(id).padStart(12, "0")}`),
+            choice: { S: choice },
+            qIndex: { N: String(qIndex) },
+            at: { N: String(now) },
+            ...(name ? { name: { S: name } } : {}),
+            ttl: { N: ttlAt(now) },
+          },
+        }),
+      );
+    },
+
+    async getRecentVotes() {
+      const res = await ddb.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :p)",
+          ExpressionAttributeValues: { ":pk": PK, ":p": { S: "feed#" } },
+          ScanIndexForward: false,
+          Limit: RECENT_VOTES_LIMIT,
+        }),
+      );
+      return (res.Items ?? [])
+        .map((item) => ({
+          id: Number(item.SK.S.slice("feed#".length)),
+          name: item.name?.S ?? null,
+          choice: item.choice.S,
+          qIndex: Number(item.qIndex.N),
+          at: Number(item.at.N),
+        }))
+        .reverse();
+    },
+
     async recordJoin(voterId, now) {
       return sendWithConflictRetry(
         ddb,
@@ -399,7 +467,10 @@ export function createDynamoStore({ tableName, gameId = "game#1", region, client
             !item.SK.S.startsWith("content#") &&
             item.SK.S !== "meta" &&
             item.SK.S !== "content-version" &&
-            item.SK.S !== "roster",
+            item.SK.S !== "roster" &&
+            // The feed's sequence outlives RESET so ids keep increasing and a
+            // projector that remembers the last id never mistakes new votes for old.
+            item.SK.S !== "feed-seq",
         );
         for (let i = 0; i < items.length; i += 25) {
           const chunk = items.slice(i, i + 25);

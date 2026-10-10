@@ -261,3 +261,100 @@ test("a reader sums both shapes while a rolling deployment writes both", async (
   });
   assert.equal((await store(client).getTally(1)).a, 200, "no vote is invisible to either");
 });
+
+// ---------------------------------------------------------------------------
+// Recent-votes feed.
+
+// An in-memory stand-in for the three commands the feed uses.
+function feedClient() {
+  const items = new Map();
+  let seq = 0;
+  const calls = [];
+  return {
+    calls,
+    items,
+    async send(command) {
+      calls.push(command);
+      const input = command.input;
+      switch (command.constructor.name) {
+        case "UpdateItemCommand":
+          assert.equal(input.Key.SK.S, "feed-seq");
+          seq += 1;
+          return { Attributes: { n: { N: String(seq) } } };
+        case "PutItemCommand":
+          items.set(input.Item.SK.S, input.Item);
+          return {};
+        case "QueryCommand": {
+          assert.equal(input.ScanIndexForward, false);
+          const rows = [...items.entries()]
+            .filter(([sk]) => sk.startsWith("feed#"))
+            .sort(([a], [b]) => (a < b ? 1 : -1))
+            .slice(0, input.Limit)
+            .map(([, item]) => item);
+          return { Items: rows };
+        }
+        default:
+          throw new Error(`unexpected ${command.constructor.name}`);
+      }
+    },
+  };
+}
+
+test("appendRecentVote writes one padded, TTL'd item per vote and never the voter id", async () => {
+  const client = feedClient();
+  const s = store(client);
+  await s.appendRecentVote({ name: "小明", choice: "b", qIndex: 2, now: NOW });
+  await s.appendRecentVote({ name: null, choice: "a", qIndex: 2, now: NOW + 5 });
+
+  assert.deepEqual([...client.items.keys()], ["feed#000000000001", "feed#000000000002"]);
+  const first = client.items.get("feed#000000000001");
+  assert.equal(first.name.S, "小明");
+  assert.ok(first.ttl.N);
+  assert.equal("name" in client.items.get("feed#000000000002"), false, "no name, no attribute");
+  assert.equal(JSON.stringify([...client.items.values()]).includes("voter"), false);
+});
+
+test("getRecentVotes returns the newest 30, oldest first, with null for a missing name", async () => {
+  const client = feedClient();
+  const s = store(client);
+  for (let i = 0; i < 33; i++) {
+    await s.appendRecentVote({
+      name: i === 32 ? null : `n${i}`,
+      choice: "a",
+      qIndex: 0,
+      now: NOW + i,
+    });
+  }
+  const feed = await s.getRecentVotes();
+  assert.equal(feed.length, 30);
+  assert.deepEqual(
+    feed.map((e) => e.id),
+    Array.from({ length: 30 }, (_, i) => i + 4),
+  );
+  assert.deepEqual(feed.at(-1), { id: 33, name: null, choice: "a", qIndex: 0, at: NOW + 32 });
+});
+
+test("reset deletes the feed items but keeps the feed sequence", async () => {
+  const deleted = [];
+  const client = {
+    async send(command) {
+      const name = command.constructor.name;
+      if (name === "QueryCommand") {
+        return {
+          Items: ["state", "feed#000000000001", "feed-seq", "roster"].map((sk) => ({
+            PK: { S: "game#1" },
+            SK: { S: sk },
+          })),
+        };
+      }
+      if (name === "BatchWriteItemCommand") {
+        for (const r of command.input.RequestItems["test-table"]) {
+          deleted.push(r.DeleteRequest.Key.SK.S);
+        }
+      }
+      return {};
+    },
+  };
+  await store(client).reset();
+  assert.deepEqual(deleted, ["state", "feed#000000000001"]);
+});
