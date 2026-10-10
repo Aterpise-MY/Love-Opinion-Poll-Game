@@ -1001,6 +1001,96 @@ button {
   font-size: 1.3rem;
 }
 
+/* The name form: the same conversation as the lobby, one line earlier. The
+   white bubble asks and the field under it is where the answer goes. Laid out
+   from the top of the screen and not its middle, so that the field is still in
+   view once a keyboard has taken the bottom half — and the button with it, on
+   all but the shortest phones. */
+.phone__name {
+  justify-content: flex-start;
+  gap: 14px;
+  padding-top: max(12px, 4vh);
+}
+/* The bubble's tail hangs under it and needs the lobby's clear air beneath. */
+.phone__name .phone__chat-in {
+  margin-bottom: 12px;
+}
+
+/* The design language's input: white, a blue outline, and a pink one with a
+   hard pink shadow while it has the focus. :focus and not :focus-visible — a
+   text field shows its focus either way, and a WebView that has never heard of
+   the newer selector drops the whole rule.
+   Never under 16px: below that iOS zooms the page in on the field and leaves
+   it zoomed. */
+.phone__name-input {
+  width: 100%;
+  padding: 13px 14px;
+  border: var(--border-w) solid var(--line-brand);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.phone__name-input:focus {
+  border-color: var(--pink-500);
+  box-shadow: 3px 3px 0 var(--pink-500);
+  outline: none;
+}
+/* Smaller than what is typed over it: the hint is a whole clause, and has to
+   fit a field on the narrowest phone in the room without being cut. */
+.phone__name-input::placeholder {
+  color: var(--ink-dim);
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 1;
+}
+
+/* Sending the answer. A tile, like every other button the phone has, in the
+   pink the answering side of the lobby conversation is drawn in. A colour of
+   its own rather than .key--a: that class means "option a", and this is not a
+   vote. */
+.phone__name-submit {
+  --key: var(--pink-500);
+  --on-key: var(--white);
+
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 12px;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+/* The small button: change the name, or leave it as it is. White, outlined
+   and quiet — it is never the thing to press — and still a thumb tall. */
+.phone__rename {
+  align-self: center;
+  min-height: 44px;
+  padding: 8px 20px;
+  border: var(--border-w-thin) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  box-shadow: 2px 2px 0 var(--line);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.phone__rename:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+/* A name inside a sentence. Breakable between any two characters: a name can
+   be twelve letters with no space among them, and a bubble is as wide as the
+   longest run it cannot break. */
+.phone__name-shown {
+  word-break: break-all;
+}
+
 /* A phone heading in the title style: white, outlined in ink, on a blue drop.
    The system face and stacked shadows, both for the phone's sake — see
    --font-display and --outline-2. */
@@ -1200,6 +1290,75 @@ button {
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+/* Who just voted. A row of its own in the screen's column, between the ballot
+   and the countdown: it is given height by the stage, so it never lies over the
+   question or the tally. Reserved for the whole of VOTING, which is why it has a
+   height even with no bubble in it. The bubbles line up from the left, newest
+   last. The tail a .bubble normally has is dropped: it would be cut by the
+   overflow, and the colour already says whose it is. */
+.vote-bubbles {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: clamp(10px, 1.2vw, 22px);
+  height: clamp(52px, 7.5vh, 84px);
+  overflow: hidden;
+  padding-bottom: 14px;
+}
+.vote-bubble {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 14px;
+  background: var(--key, var(--white));
+  color: var(--on-key, var(--ink));
+  font-size: clamp(0.95rem, 1.3vw, 1.4rem);
+  font-weight: 700;
+  line-height: 1.35;
+  /* One line, never wrapped. A bubble keeps its own width (the row clips
+     rather than squeezing a short name), so the cuts are per part: a name
+     past seven characters and an option past fourteen end in an ellipsis. */
+  overflow: hidden;
+  white-space: pre;
+  animation: vote-bubble 3.5s both;
+}
+.vote-bubble__who,
+.vote-bubble__what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vote-bubble__who {
+  max-width: 7em;
+}
+.vote-bubble__what {
+  flex: 0 0 auto;
+  max-width: 14em;
+}
+.vote-bubble::after {
+  display: none;
+}
+@keyframes vote-bubble {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateY(12px);
+  }
+  8% {
+    opacity: 1;
+    transform: scale(1.06) translateY(0);
+  }
+  14% {
+    transform: scale(1);
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* STAGE 1/5, as a yellow badge. */

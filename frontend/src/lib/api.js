@@ -1,3 +1,5 @@
+import { nameField } from "./name.js";
+
 // Same origin by default. The frontend and the API are served by one process,
 // so there is no base URL to configure and no CORS in the system at all.
 //
@@ -70,8 +72,10 @@ export const getState = (adminKey) =>
 
 export const postJoin = (voterId) => request("/join", { method: "POST", body: { voterId } });
 
-export const postVote = (voterId, qIndex, choice) =>
-  request("/vote", { method: "POST", body: { voterId, qIndex, choice } });
+// The name rides on the vote and not on the join: the server ignores it on
+// /join. No name, no field — the vote counts as nameless.
+export const postVote = (voterId, qIndex, choice, name) =>
+  request("/vote", { method: "POST", body: { voterId, qIndex, choice, ...nameField(name) } });
 
 // extra carries the one action that needs more than a verb: TIMER_SET's
 // { minutes }. Every other action ignores it, so existing callers pass
