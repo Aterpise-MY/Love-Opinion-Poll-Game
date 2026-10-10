@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "project": {
+    "name": "Love Opinion Poll Game",
+    "oneLiner": "a live audience opinion-poll game played from phones, with operator and projector screens",
+    "stack": "Node.js 22 (ESM, no web framework), React 18.3, Vite 5.4, DynamoDB and S3 through AWS SDK v3, node:test, ESLint 10, Prettier 3, Docker, Terraform, EKS on Fargate, GitHub Actions"
+  },
+  "commands": {
+    "dev": "npm run dev --prefix frontend",
+    "test": "npm test",
+    "testSingle": "node --test backend/game.test.js",
+    "build": "npm run build --prefix frontend",
+    "worktreeSetup": [
+      "npm ci",
+      "npm ci --prefix backend",
+      "npm ci --prefix frontend"
+    ]
+  },
+  "branches": {
+    "staging": "master",
+    "production": "master"
+  },
+  "paths": {
+    "buildOutput": [
+      "frontend/dist",
+      "backend/public"
+    ]
+  },
+  "deploy": {
+    "target": "The GitHub Actions deploy workflow (push to master, image to ECR, rollout to EKS on Fargate)"
+  },
+  "github": {
+    "enabled": true
+  },
+  "team": {
+    "hr": "hr-manager",
+    "subOrchestrator": "orchestrator"
+  },
+  "generated": {
+    ".github/ISSUE_TEMPLATE/taskboard.md": "sha256-3c95056fbb09c23b3e00de6eefacda511557e899848f85e3024f35534b27ff1c",
+    ".github/PULL_REQUEST_TEMPLATE.md": "sha256-2568fbcfca74698913f4ba3dc5bfd2a6fdbf004ad8fb25db296fb9e0b7385fd6"
+  }
+}

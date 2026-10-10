@@ -2,6 +2,10 @@
 # Without this line every build ships all of it to the daemon.
 infra
 
+# Task checkouts nested in the main one. The patterns here without a leading
+# **/ match at the context root only, so they miss each one's .env and infra.
+worktrees
+
 .git
 .claude
 .playwright-mcp

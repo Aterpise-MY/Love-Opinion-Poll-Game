@@ -15,6 +15,9 @@ backend/deck.json
 # guarantees the next `npm install` fights the formatter.
 **/package-lock.json
 
+# create-agent-orchestrator writes this, and it has to stay exactly as written.
+.agent-orchestrator.json
+
 # Terraform has its own formatter — `terraform fmt` — and Prettier cannot
 # parse HCL anyway.
 infra/
