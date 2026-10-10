@@ -17,6 +17,7 @@ import {
   setChoice,
   syncEpoch,
 } from "../lib/storage.js";
+import BubbleChoices from "./BubbleChoices.jsx";
 import NameEntry, { NAME_TEXT } from "./NameEntry.jsx";
 
 const POLL_MS = 2000;
@@ -300,30 +301,17 @@ export default function Phone() {
             </div>
           </section>
 
-          {canAnswer && (
-            // Still two per row past two options — the odd one out spanning the
-            // full width reads as deliberate, where a three-across grid makes
-            // every button too small to hit without looking.
-            <div className={`quiz__choices ${options.length > 2 ? "quiz__choices--many" : ""}`}>
-              {options.map((option) => (
-                <button
-                  key={option.key}
-                  className={`tile key--${option.key} tile--press choice ${
-                    option.image ? "choice--pictured" : ""
-                  }`}
-                  onClick={() => vote(option.key)}
-                  disabled={pending !== null}
-                >
-                  {/* The picture comes to the phone even though the clips do
-                      not: it is already compressed to a couple of hundred KB,
-                      and a button that means "the third photograph" cannot be
-                      pressed by someone who cannot see the photograph. */}
-                  {option.image && <img className="choice__image" src={option.image} alt="" />}
-                  {option.icon && <span className="choice__icon glyph">{option.icon}</span>}
-                  <span className="choice__label">{option.label}</span>
-                </button>
-              ))}
-            </div>
+          {/* Bubbles stay up through the whole voting phase: once a vote is in
+              the chosen one is marked and the rest go quiet, instead of the
+              block disappearing. Locked and reveal never showed the buttons
+              and still do not. */}
+          {voting && (
+            <BubbleChoices
+              options={options}
+              myChoice={myChoice}
+              disabled={!canAnswer || pending !== null}
+              onVote={vote}
+            />
           )}
 
           {/* In the colour of what was chosen, so the phone keeps saying which

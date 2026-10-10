@@ -688,21 +688,66 @@ button {
 .quiz__choices {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  /* The row gap is bigger than the column gap: each bubble hangs a tail eleven
+     pixels below itself, and that tail must not touch the bubble underneath. */
+  gap: 24px 14px;
+  /* The last row's tail and the hard shadow reach past the grid's own box. */
+  padding-bottom: 8px;
 }
 
-.choice {
+/* An answer is a chat bubble in its option colour. .bubble brings the shape,
+   the border, the hard shadow and the tail; this turns it from a white speech
+   note into a full-width button. Two classes deep so it wins over .bubble's
+   inline-block and white ground without caring which rule comes later. */
+.bubble.choice {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  width: 100%;
   min-height: 96px;
   padding: 14px 10px;
+  background: var(--key, var(--white));
+  box-shadow: var(--shadow-hard);
+  color: var(--on-key);
   text-align: center;
+  cursor: pointer;
+  transition:
+    transform var(--dur-fast),
+    box-shadow var(--dur-fast),
+    opacity 0.35s ease;
+}
+
+/* Into its own shadow, as the tiles do. The tail travels with the bubble. */
+.bubble.choice:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 var(--line);
+}
+.bubble.choice:disabled {
+  cursor: default;
+}
+
+/* The odd one out in a row of its own. */
+.choice--wide {
+  grid-column: 1 / -1;
+}
+
+/* Once a vote is in: the pressed bubble gets a yellow ring, the others step
+   back. Dimmed rather than hidden so the player can still read what the
+   others said. */
+.bubble.choice.is-mine {
+  box-shadow:
+    0 0 0 4px var(--alert),
+    var(--shadow-hard);
+}
+.bubble.choice.is-passed {
+  opacity: 0.45;
 }
 
 /* Past two options the buttons still have to fit above the fold on a small
    phone, with the thing being judged still readable above them. */
-.quiz__choices--many .choice {
+.quiz__choices--many .bubble.choice {
   min-height: 68px;
   padding: 10px;
 }
