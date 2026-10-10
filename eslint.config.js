@@ -28,6 +28,8 @@ export default [
       "infra/**",
       // Browser-automation scratch output.
       ".playwright-mcp/**",
+      // Task checkouts, one per branch. Each is linted from its own root.
+      "worktrees/**",
     ],
   },
 

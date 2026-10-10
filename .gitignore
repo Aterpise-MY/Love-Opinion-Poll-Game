@@ -6,6 +6,9 @@ dist/
 .env
 .env.*
 !.env.example
+# The other two places a real ADMIN_KEY ends up on a laptop.
+.envrc
+docker-compose.override.yml
 
 # Browser-automation scratch output.
 .playwright-mcp/
@@ -25,6 +28,19 @@ infra/build/
 terraform.tfvars
 crash.log
 # .terraform.lock.hcl is intentionally committed — pin the providers.
+# Any other variable file can hold the admin key just as terraform.tfvars
+# does. terraform.tfvars.example does not end in .tfvars, so it stays tracked.
+*.tfvars
+*.tfvars.json
+# Local overrides, and the CLI config that holds registry tokens.
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# Provider binaries and cached state, wherever terraform init is run.
+.terraform/
 
 # Built frontend, copied in by the Dockerfile.
 backend/public/
@@ -36,6 +52,28 @@ tfplan*
 # Claude Code's per-machine permission settings.
 .claude/settings.local.json
 
+# Keys and credentials. The repo never needs one: CI reaches AWS over OIDC
+# and the pods pull with their execution role.
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+.aws/
+credentials.csv
+*_accessKeys.csv
+.npmrc
+
+# kubectl config for the cluster, as `aws eks update-kubeconfig` writes it.
+kubeconfig
+*.kubeconfig
+.kube/
+
+# Logs. They can capture request data, the admin key included.
+*.log
+
 # The Terraform as it stood before the move to EKS, copied aside when this
 # project was not yet in git. The first commit holds the same files.
 infra-ecs-backup/
+worktrees/
