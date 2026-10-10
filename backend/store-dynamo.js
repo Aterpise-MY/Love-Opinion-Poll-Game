@@ -171,6 +171,9 @@ export function createDynamoStore({ tableName, gameId = "game#1", region, client
         updatedAt: Number(item.updatedAt?.N ?? 0),
         history: (item.history?.L ?? []).map((entry) => entry.S),
         showRules: Boolean(item.showRules?.BOOL),
+        // Absent on an item written before offline mode was persisted (or by
+        // an old pod mid-rollout), which reads as not offline.
+        offline: Boolean(item.offline?.BOOL),
         joined,
         meta,
         contentVersion,
@@ -186,7 +189,7 @@ export function createDynamoStore({ tableName, gameId = "game#1", region, client
             TableName: tableName,
             Key: key("state"),
             UpdateExpression:
-              "SET #ph = :ph, #qi = :qi, #pe = :pe, #ge = :ge, #gp = :gp, #gd = :gd, #je = :je, #jd = :jd, #ra = :ra, #ep = :ep, #hi = :hi, #ua = :ua, #ttl = :ttl, #sr = :sr",
+              "SET #ph = :ph, #qi = :qi, #pe = :pe, #ge = :ge, #gp = :gp, #gd = :gd, #je = :je, #jd = :jd, #ra = :ra, #ep = :ep, #hi = :hi, #ua = :ua, #ttl = :ttl, #sr = :sr, #of = :of",
             // Optimistic lock: a second click that read the same prior state loses.
             ConditionExpression: "attribute_not_exists(SK) OR #ua = :prev",
             ExpressionAttributeNames: {
@@ -204,6 +207,7 @@ export function createDynamoStore({ tableName, gameId = "game#1", region, client
               "#ua": "updatedAt",
               "#ttl": "ttl",
               "#sr": "showRules",
+              "#of": "offline",
             },
             ExpressionAttributeValues: {
               ":ph": { S: next.phase },
@@ -221,6 +225,7 @@ export function createDynamoStore({ tableName, gameId = "game#1", region, client
               ":prev": { N: String(expectedUpdatedAt ?? 0) },
               ":ttl": { N: ttlAt(now) },
               ":sr": { BOOL: Boolean(next.showRules) },
+              ":of": { BOOL: Boolean(next.offline) },
             },
           }),
         );

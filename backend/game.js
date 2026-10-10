@@ -92,9 +92,9 @@ export function initialState(epoch = 0) {
     //
     // It is a setting, not progress through the show, so it is the one field
     // here that RESET does not put back: the router carries it across (see
-    // POST /admin there). It lives in memory with the rest of this state; the
-    // DynamoDB adapter names each attribute it persists and does not know
-    // this one.
+    // POST /admin there). The DynamoDB adapter names each attribute it
+    // persists, so this one is listed there too (getState and putState): a
+    // field missing from that list is silently dropped in production.
     offline: false,
   };
 }
